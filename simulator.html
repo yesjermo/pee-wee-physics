@@ -259,7 +259,7 @@
   <div class="fld"><small>Operator</small><b>YOU · ON DUTY</b></div>
 </header>
 <div id="callouts"><svg></svg></div>
-<div id="statusChip"><small>MODE · SYSTEM STATE</small><b id="chipText">STANDBY</b><span id="chipSub"></span></div>
+<div id="statusChip"><small>MODE · SYSTEM STATE<span id="chipFace"></span></small><b id="chipText">STANDBY</b><span id="chipSub"></span></div>
 <div id="opLog">
   <div class="head">OPERATION LOG<span class="idx">LAST 60 S</span></div>
   <div class="rowx"><button id="opPlay" title="Release / stop (Space)">▶</button>
@@ -272,7 +272,7 @@
     <h2>Display</h2>
     <div class="btns" style="margin-bottom:6px">
       <button data-view="side">Side</button><button data-view="top">Top</button><button data-view="macro">Macro</button>
-      <button data-view="cross">X-Sect</button><button data-view="wide">Wide</button>
+      <button data-view="cross">X-Sect</button><button data-view="wide">Wide</button><button data-view="face">Face</button>
     </div>
     <div class="btns"><button id="btnLabels">Labels</button><button id="btnTurntable">Turntable</button><button id="btnStudio">Studio AO</button></div>
   </section>
@@ -1227,6 +1227,7 @@ function makeCensorTexture() {
   return tex;
 }
 
+const _glow = new THREE.Color(), GLOW_CALM = new THREE.Color('#4fd6e8'), GLOW_WARN = new THREE.Color('#ffb020'), GLOW_HOT = new THREE.Color('#ff3040');
 const _hip = new THREE.Vector3(), _pq = new THREE.Quaternion(), _pe = new THREE.Euler();
 
 /* ---- Skins / costumes ---- */
@@ -1388,6 +1389,118 @@ function buildCartoon(rig, root) {
   }
 }
 
+/* =====================================================================
+   Realistic head: a sculpted head mesh with eyes, lids, brows, nose, ears, hair and live-rebuilt lips,
+   attached to the rig's head bone. Driven by the expression system (smile / frown / open / teeth / brows / lids).
+   ===================================================================== */
+// Head centre relative to the head bone (metric, body-aligned). Scaled to fully enclose the rig's own head
+// (measured: ±8.8 cm wide, 21 cm tall, 13.8 cm in front / 11 cm behind the bone) so none of it pokes through.
+const PRO_HEAD = { pos: [0, 0.1, 0.02], scale: [1.18, 1.0, 1.22] };
+const gauss = (a, mu, s) => Math.exp(-(((a - mu) / s) ** 2));
+/** Sculpt a unit sphere into a human head (≈15.6 cm wide, 23.6 cm tall, 20 cm deep). */
+function sculptHead(geo) {
+  const p = geo.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const { x, y, z } = v, front = Math.max(z, 0);
+    let sx = 0.078, sy = 0.118, sz = 0.1;
+    if (y < -0.1) { const t = (-y - 0.1) / 0.9; sx *= 1 - 0.26 * t * t; sz *= 1 - 0.04 * t; }   // jaw tapers to the chin (gently: the rig's jaw is boxy)
+    if (z < 0) sz *= 1.08;                                                               // fuller back of the skull
+    let X = x * sx, Y = y * sy, Z = z * sz;
+    Z += 0.012 * gauss(y, -0.86, 0.16) * front;                                          // chin
+    Z += 0.006 * gauss(y, 0.24, 0.1) * gauss(x, 0, 0.5) * front;                         // brow ridge
+    for (const s of [-1, 1]) {
+      Z -= 0.011 * gauss(x, s * 0.4, 0.17) * gauss(y, 0.05, 0.12) * front;              // eye sockets
+      X += s * 0.004 * gauss(x, s * 0.62, 0.2) * gauss(y, -0.12, 0.15);                 // cheekbones
+      Z += 0.004 * gauss(x, s * 0.55, 0.2) * gauss(y, -0.12, 0.15) * front;
+    }
+    p.setXYZ(i, X, Y, Z);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+const PRO_MATS = {
+  sclera: new THREE.MeshPhysicalMaterial({ color: '#f3efe9', roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.05 }),
+  iris:   new THREE.MeshStandardMaterial({ color: '#5a3a22', roughness: 0.4 }),
+  pupil:  new THREE.MeshBasicMaterial({ color: '#070707' }),
+  glint:  new THREE.MeshBasicMaterial({ color: '#ffffff' }),
+  hair:   new THREE.MeshStandardMaterial({ color: '#2a1d14', roughness: 0.9 }),
+  lip:    new THREE.MeshPhysicalMaterial({ color: '#b06a5a', roughness: 0.45, clearcoat: 0.4, clearcoatRoughness: 0.3 }),
+  mouth:  new THREE.MeshBasicMaterial({ color: '#3b1612' }),
+  teeth:  new THREE.MeshStandardMaterial({ color: '#f4efe4', roughness: 0.3 }),
+  nostril: new THREE.MeshBasicMaterial({ color: '#4a2219' }),
+  blush:  new THREE.MeshBasicMaterial({ color: '#ff6f7d', transparent: true, opacity: 0.32, depthWrite: false }),
+};
+function buildProHead(rig, skinMat) {
+  if (!rig.headA) return;
+  const g = new THREE.Group(); g.position.set(...PRO_HEAD.pos); g.scale.set(...PRO_HEAD.scale); g.visible = false;
+  rig.headA.add(g);
+  const skinParts = [];
+  const add = (mesh, x, y, z, parent = g, skin = false) => { mesh.position.set(x, y, z); mesh.castShadow = true; parent.add(mesh); if (skin) skinParts.push(mesh); return mesh; };
+  add(new THREE.Mesh(sculptHead(new THREE.SphereGeometry(1, 72, 54)), skinMat), 0, 0, 0, g, true);
+  // short hair: the same sculpt, cropped to the crown, slightly larger, hairline set back
+  const hair = add(new THREE.Mesh(new THREE.SphereGeometry(1, 64, 24, 0, Math.PI * 2, 0, Math.PI * 0.42), PRO_MATS.hair), 0, 0.006, -0.012);
+  hair.scale.set(0.081, 0.122, 0.112); hair.rotation.x = -0.38;          // smooth dome, hairline high at the front
+  const P = { lidsU: [], brows: [], blush: [] };
+  for (const s of [-1, 1]) {
+    // eye: sclera, iris, pupil, catch-light, upper lid (rotates to blink), lower lid
+    const eye = new THREE.Group(); add(eye, s * 0.031, 0.006, 0.074);
+    eye.add(new THREE.Mesh(new THREE.SphereGeometry(0.0125, 24, 18), PRO_MATS.sclera));
+    const iris = new THREE.Mesh(new THREE.CircleGeometry(0.0058, 24), PRO_MATS.iris); iris.position.z = 0.0122; eye.add(iris);
+    const pupil = new THREE.Mesh(new THREE.CircleGeometry(0.0026, 16), PRO_MATS.pupil); pupil.position.z = 0.0124; eye.add(pupil);
+    const glint = new THREE.Mesh(new THREE.CircleGeometry(0.0011, 10), PRO_MATS.glint); glint.position.set(-0.0016, 0.0018, 0.0126); eye.add(glint);
+    const lidU = new THREE.Mesh(new THREE.SphereGeometry(0.0134, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), skinMat); lidU.rotation.x = -0.62; eye.add(lidU); skinParts.push(lidU);
+    const lidL = new THREE.Mesh(new THREE.SphereGeometry(0.0132, 24, 8, 0, Math.PI * 2, Math.PI * 0.78, Math.PI * 0.22), skinMat); lidL.rotation.x = -0.2; eye.add(lidL); skinParts.push(lidL);
+    lidU.userData.side = s; P.lidsU.push(lidU);
+    // arched brow, pivots at its middle
+    const browCurve = new THREE.CatmullRomCurve3([new THREE.Vector3(-0.016, -0.002, 0), new THREE.Vector3(-0.004, 0.003, 0.002), new THREE.Vector3(0.01, 0.002, 0.001), new THREE.Vector3(0.018, -0.003, -0.003)]);
+    const brow = add(new THREE.Mesh(new THREE.TubeGeometry(browCurve, 16, 0.0036, 6), PRO_MATS.hair), s * 0.032, 0.03, 0.088);
+    brow.scale.x = s; brow.userData = { side: s, y0: brow.position.y }; P.brows.push(brow);
+    // ear
+    const ear = add(new THREE.Mesh(new THREE.TorusGeometry(0.015, 0.006, 10, 20, Math.PI * 1.6), skinMat), s * 0.079, -0.006, -0.008, g, true);
+    ear.rotation.set(0, s * Math.PI / 2, Math.PI * 0.7); ear.scale.set(1, 1.35, 1);
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.009, 12, 10), skinMat), s * 0.076, -0.008, -0.008, g, true).scale.set(0.4, 1.4, 1);
+    // nose wing + nostril
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.0078, 14, 10), skinMat), s * 0.0105, -0.037, 0.096, g, true).scale.set(1, 0.85, 0.9);
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.0033, 10, 8), PRO_MATS.nostril), s * 0.0062, -0.043, 0.1).scale.set(1, 0.6, 0.8);
+    // cheek blush (embarrassed)
+    const b = add(new THREE.Mesh(new THREE.SphereGeometry(0.014, 14, 10), PRO_MATS.blush), s * 0.046, -0.026, 0.074); b.scale.z = 0.35; P.blush.push(b);
+  }
+  // nose bridge + tip
+  const bridge = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.0066, 0.03, 6, 12), skinMat), 0, -0.012, 0.094, g, true); bridge.rotation.x = -0.32;
+  add(new THREE.Mesh(new THREE.SphereGeometry(0.0108, 16, 12), skinMat), 0, -0.033, 0.104, g, true).scale.set(1, 0.95, 0.95);
+  // mouth: dark interior + teeth behind live-rebuilt lips
+  P.mouthIn = add(new THREE.Mesh(new THREE.CircleGeometry(0.019, 24), PRO_MATS.mouth), 0, -0.062, 0.084);
+  P.teeth = add(new THREE.Mesh(new RoundedBoxGeometry(0.03, 0.007, 0.006, 2, 0.002), PRO_MATS.teeth), 0, -0.057, 0.084);
+  P.lipU = add(new THREE.Mesh(new THREE.BufferGeometry(), PRO_MATS.lip), 0, -0.06, 0.087);
+  P.lipL = add(new THREE.Mesh(new THREE.BufferGeometry(), PRO_MATS.lip), 0, -0.06, 0.087);
+  P.cur = { smile: 0, open: 0, teeth: 0 }; P.built = { smile: 9, open: 9 };
+  P.group = g; P.skinParts = skinParts; P.hair = hair;
+  rig.pro = P;
+}
+/** Rebuild the lip tubes for a smile (-1 frown … 1 smile) and an open amount (0 … 1). */
+const _lp = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+function buildLips(P, smile, open) {
+  const w = 0.028 + smile * 0.004, c = smile * 0.013, o = open;
+  const lip = (pts, r) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p => p.clone())), 24, r, 8);
+  const U = [_lp[0].set(-w, c, -0.004), _lp[1].set(-w * 0.5, 0.0035 + o * 0.006, 0.002), _lp[2].set(0, 0.005 + o * 0.007, 0.004), _lp[3].set(w * 0.5, 0.0035 + o * 0.006, 0.002), _lp[4].set(w, c, -0.004)];
+  const nu = lip(U, 0.0042);
+  const L = [_lp[0].set(-w, c, -0.004), _lp[1].set(-w * 0.5, -0.004 - o * 0.014, 0.002), _lp[2].set(0, -0.0055 - o * 0.018, 0.004), _lp[3].set(w * 0.5, -0.004 - o * 0.014, 0.002), _lp[4].set(w, c, -0.004)];
+  const nl = lip(L, 0.0054);
+  P.lipU.geometry.dispose(); P.lipU.geometry = nu;      // dispose the previous build (no GPU leaks)
+  P.lipL.geometry.dispose(); P.lipL.geometry = nl;
+  P.built.smile = smile; P.built.open = open;
+}
+/** Per-expression targets for the realistic face. */
+function proTargets(ex) {
+  const m = ex.mouth;
+  return {
+    smile: m === 'smile' ? 1 : m === 'frown' ? -0.85 : m === 'grit' ? 0.25 : 0,
+    open: m === 'o' ? 0.95 : m === 'grit' ? 0.3 : m === 'smile' && ex.lid > 1 ? 0.05 : m === 'smile' ? 0.25 : 0,
+    teeth: m === 'grit' || (m === 'smile' && ex.lid <= 1) ? 1 : 0,
+  };
+}
+
 function buildSkeletonParts(rig) {
   const add = (anchor, mesh, x, y, z) => { if (!anchor) return mesh; mesh.position.set(x, y, z); mesh.castShadow = true; mesh.visible = false; anchor.add(mesh); rig.skel.push(mesh); return mesh; };
   // Skull: cranium, cheekbones, eye sockets, nasal cavity, jaw, teeth
@@ -1450,7 +1563,7 @@ class HumanFigure {
     this.root = new THREE.Group(); this.root.position.y = -PIVOT_Y; this.pivot.add(this.root);
     this.clipPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
     this.skin = new THREE.MeshPhysicalMaterial({
-      color: SKIN_TONE, roughness: 0.55, sheen: 0.6, sheenColor: new THREE.Color('#ffd7c2'), sheenRoughness: 0.6,
+      color: SKIN_TONE, roughness: 0.5, specularIntensity: 0.35, sheen: 0.7, sheenColor: new THREE.Color('#ffc9b0'), sheenRoughness: 0.5,
       clearcoat: 0.15, transparent: false, opacity: 1, side: THREE.DoubleSide, clippingPlanes: [],
     });
     const part = (geo, x, y, z, mat = this.skin, parent = this.root) => {
@@ -1591,8 +1704,7 @@ class HumanFigure {
     this.fluid.position.copy(this.bladder.position);
 
     const urge = THREE.MathUtils.smoothstep(state.fill, 0.4, 1);
-    const glow = new THREE.Color('#4fd6e8').lerp(new THREE.Color('#ffb020'), Math.min(1, urge * 1.6))
-      .lerp(new THREE.Color('#ff3040'), Math.max(0, urge * 2 - 1));
+    const glow = _glow.copy(GLOW_CALM).lerp(GLOW_WARN, Math.min(1, urge * 1.6)).lerp(GLOW_HOT, Math.max(0, urge * 2 - 1));
     this.bladderMat.emissive.copy(glow);
     this.bladderMat.emissiveIntensity = 0.15 + urge * 0.9 * (state.fill > 0.9 ? 0.7 + 0.3 * Math.sin(t * 8) : 1);
     this.bladderMat.opacity = 0.25 + 0.35 * urge;
@@ -1694,6 +1806,8 @@ class HumanFigure {
       rig.headA = anchor('mixamorigHead'); rig.chestA = anchor('mixamorigSpine1'); rig.hipA = anchor('mixamorigHips');
       buildSkeletonParts(rig);
       if (key === 'male') { buildCartoon(rig, this.root); addSkinnedInk(rig); }
+      if (key === 'male' || key === 'realman') buildProHead(rig, this.skin);
+      if (key === 'realman') for (const { mesh } of rig.meshes) if (/visor/i.test(mesh.name)) mesh.visible = false;
       this.rigs[key] = rig;
       onDone?.(rig);
     }, undefined, () => this.loadRig(key, urls, i + 1, onDone));
@@ -1724,7 +1838,13 @@ class HumanFigure {
     for (const p of rig.skel) p.visible = style === 'skeleton';
     this.bellyM.material = style === 'skin' ? this.skin : SKIN_MATS[style];
     skeletonViz.set(style === 'skeleton' ? rig : null);
-    this.face.visible = !this.sitting && !rig.ownFace && !!rig.headA && style !== 'skeleton' && !(style === 'cartoon' && rig.toon);
+    this.face.visible = !this.sitting && !rig.ownFace && !rig.pro && !!rig.headA && style !== 'skeleton' && !(style === 'cartoon' && rig.toon);
+    if (rig.pro) {
+      const P = rig.pro, headMat = (style === 'skin' || style === 'cartoon') ? this.skin : SKIN_MATS[style];
+      P.group.visible = !this.sitting && !['cartoon', 'skeleton', 'gloop'].includes(style);
+      for (const m of P.skinParts) m.material = headMat;
+      P.hair.visible = style !== 'sculpt';
+    }
     // Sculpt look: bald grey head like a ZBrush base mesh
     const sculpt = style === 'sculpt';
     this.face.traverse(o => { if (o.isMesh) { o.userData.mat0 ||= o.material; o.material = sculpt ? SKIN_MATS.sculpt : o.userData.mat0; } });
@@ -1754,7 +1874,8 @@ class HumanFigure {
     const sets = [];
     if (this.face.visible) sets.push(this);
     if (this.rig?.toonFace && this.rig.toon[0]?.visible) sets.push(this.rig.toonFace);
-    if (!sets.length) return;
+    const P = this.rig?.pro && this.rig.pro.group.visible ? this.rig.pro : null;
+    if (!sets.length && !P) return;
     let name = state.expression;
     if (name === 'auto') {
       name = state.dissolved || sim.submerged > 0 || state.bodyWater < 0.3 ? 'surprised'
@@ -1766,6 +1887,22 @@ class HumanFigure {
     if (this._blink < -0.13) this._blink = 2.5 + Math.random() * 3;
     const lid = this._blink < 0 ? 1.5 : ex.lid;
     const f = Math.min(1, dt * 12);
+    this.expressionName = name;
+    if (P) {
+      const tg = proTargets(ex), k = Math.min(1, dt * 9);
+      P.cur.smile += (tg.smile - P.cur.smile) * k; P.cur.open += (tg.open - P.cur.open) * k; P.cur.teeth += (tg.teeth - P.cur.teeth) * k;
+      if (Math.abs(P.cur.smile - P.built.smile) > 0.01 || Math.abs(P.cur.open - P.built.open) > 0.01) buildLips(P, P.cur.smile, P.cur.open);
+      P.mouthIn.scale.set(1, Math.max(0.02, P.cur.open * 0.9 + 0.05), 1);
+      P.mouthIn.visible = P.cur.open > 0.04 || P.cur.teeth > 0.3;
+      P.teeth.visible = P.cur.teeth > 0.3; P.teeth.position.y = -0.057 + P.cur.open * 0.004;
+      const close = Math.min(1, lid / 1.5);
+      for (const l of P.lidsU) l.rotation.x += (THREE.MathUtils.lerp(-0.62, 1.6, close) - l.rotation.x) * f;
+      for (const b of P.brows) {
+        b.rotation.z += ((-b.userData.side * ex.brow * 0.9) - b.rotation.z) * f;      // furrow: inner ends down (angry/strained)
+        b.position.y += ((b.userData.y0 + ex.browY * 0.9) - b.position.y) * f;          // raise: surprised / relieved
+      }
+      for (const c of P.blush) c.visible = !!ex.blush;
+    }
     for (const S of sets) {
       for (const l of S.lids) l.rotation.x += (THREE.MathUtils.lerp(0.2, 1.55, Math.min(1, lid / 1.5)) - l.rotation.x) * f;
       for (const b of S.brows) {
@@ -2163,13 +2300,20 @@ const VIEWS = {
   cross: { pos: [1.35, 1.05, 0.25], target: [0, 0.98, 0.02] },
   wide:  { pos: [3.8, 3.2, -3.2],   target: [0, 0.4, 0.3] },
   field: { pos: [3.1, 1.45, 2.6],   target: [0, 0.75, 0.55] },
+  face:  { pos: [0, 0, 0], target: [0, 0, 0] },              // computed from the head bone at the moment you press it
 };
 let tween = null;
 function goView(name) {
   const v = VIEWS[name]; if (!v) return;
   state.view = name;
-  tween = { t: 0, fromP: camera.position.clone(), fromT: controls.target.clone(),
-    toP: new THREE.Vector3(...v.pos), toT: new THREE.Vector3(...v.target) };
+  let toP = new THREE.Vector3(...v.pos), toT = new THREE.Vector3(...v.target);
+  if (name === 'face') {                                   // close-up on the face, in front of the body and slightly to the side
+    const head = body.rig?.bones['mixamorigHead']?.bone;
+    if (head) head.getWorldPosition(toT).add(new THREE.Vector3(0, 0.09, 0)); else toT.set(0, 1.62, 0);
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(body.pivot.quaternion), side = new THREE.Vector3(1, 0, 0).applyQuaternion(body.pivot.quaternion);
+    toP.copy(toT).addScaledVector(fwd, 0.62).addScaledVector(side, 0.16).add(new THREE.Vector3(0, 0.02, 0));
+  }
+  tween = { t: 0, fromP: camera.position.clone(), fromT: controls.target.clone(), toP, toT };
   body.setCrossSection(name === 'cross');
   document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === name));
 }
@@ -2870,6 +3014,7 @@ function hudFrame(dt) {
   $('hdrTime').textContent = mmss(run);
   $('hdrStatus').textContent = status; $('hdrDot').classList.toggle('on', active);
   $('chipText').textContent = status; $('chipSub').textContent = sub;
+  $('chipFace').textContent = body.expressionName && (body.rig?.pro?.group.visible || body.face.visible || body.rig?.toon?.[0]?.visible) ? ' · FACE: ' + body.expressionName.toUpperCase() : '';
   $('hudMl').textContent = Math.round(state.fill * CAPACITY_ML);
   $('hudUrge').textContent = urgeText(state.fill);
   drawSpark();
