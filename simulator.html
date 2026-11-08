@@ -1072,59 +1072,6 @@ function makeAnchor(bone, root) {
 /* ---- Skeleton costume: skull, ribcage, pelvis ride on bone anchors; long bones are rebuilt each frame ---- */
 const boneMat = new THREE.MeshStandardMaterial({ color: '#ece3c8', roughness: 0.5 });
 const socketMat = new THREE.MeshBasicMaterial({ color: '#1a1410' });
-/* Sculpted muscle definition for the male rig, in root space at the bind (T-) pose:
-   [bone, x, y, z, radiusX, radiusY, radiusZ, rotZ, mirror ('both' = same bone both sides, 'lr' = Left→Right bone)] */
-const MUSCLES = [
-  // chest: pectoralis major (clavicular + sternal heads)
-  ['Spine2', 0.062, 1.36, 0.106, 0.058, 0.028, 0.02, -0.1, 'both'],
-  ['Spine2', 0.074, 1.322, 0.11, 0.068, 0.04, 0.024, -0.22, 'both'],
-  // rectus abdominis: 8-pack in four rows either side of the linea alba
-  ['Spine1', 0.027, 1.235, 0.114, 0.021, 0.022, 0.012, 0, 'both'],
-  ['Spine1', 0.027, 1.185, 0.094, 0.021, 0.022, 0.012, 0, 'both'],
-  ['Spine', 0.027, 1.13, 0.088, 0.021, 0.024, 0.012, 0, 'both'],
-  ['Spine', 0.026, 1.075, 0.1, 0.019, 0.026, 0.011, 0, 'both'],
-  // serratus anterior "fingers", external obliques and the inguinal V-lines
-  ['Spine1', 0.112, 1.27, 0.07, 0.024, 0.01, 0.012, 0.5, 'both'],
-  ['Spine1', 0.116, 1.24, 0.066, 0.024, 0.01, 0.012, 0.5, 'both'],
-  ['Spine1', 0.118, 1.21, 0.06, 0.024, 0.01, 0.012, 0.5, 'both'],
-  ['Spine', 0.1, 1.1, 0.06, 0.03, 0.06, 0.026, 0.15, 'both'],
-  // back & neck: lats, trapezius, sternocleidomastoid
-  ['Spine1', 0.12, 1.25, -0.04, 0.035, 0.1, 0.05, 0.1, 'both'],
-  ['Spine2', 0.07, 1.47, -0.07, 0.055, 0.025, 0.035, 0.4, 'both'],
-  ['Neck', 0.024, 1.53, 0.005, 0.011, 0.05, 0.011, -0.35, 'both'],
-  // glutes
-  ['Hips', 0.066, 0.93, -0.088, 0.065, 0.065, 0.04, 0, 'both'],
-  // arms: deltoid, biceps, triceps, brachioradialis, forearm flexors
-  ['LeftArm', 0.19, 1.44, -0.065, 0.06, 0.055, 0.055, 0, 'lr'],
-  ['LeftArm', 0.32, 1.434, -0.045, 0.075, 0.03, 0.03, 0, 'lr'],
-  ['LeftArm', 0.31, 1.43, -0.105, 0.08, 0.03, 0.03, 0, 'lr'],
-  ['LeftForeArm', 0.53, 1.45, -0.07, 0.07, 0.026, 0.028, 0, 'lr'],
-  ['LeftForeArm', 0.56, 1.42, -0.065, 0.075, 0.024, 0.026, 0, 'lr'],
-  // legs: rectus femoris, vastus lateralis, vastus medialis teardrop, sartorius, tibialis, gastrocnemius heads
-  ['LeftUpLeg', 0.095, 0.74, 0.072, 0.034, 0.15, 0.028, 0, 'lr'],
-  ['LeftUpLeg', 0.115, 0.72, 0.04, 0.032, 0.13, 0.026, 0, 'lr'],
-  ['LeftUpLeg', 0.07, 0.6, 0.058, 0.03, 0.05, 0.028, 0, 'lr'],
-  ['LeftLeg', 0.104, 0.33, 0.035, 0.018, 0.1, 0.016, 0, 'lr'],
-  ['LeftLeg', 0.112, 0.39, -0.08, 0.028, 0.08, 0.032, 0, 'lr'],
-  ['LeftLeg', 0.078, 0.39, -0.08, 0.026, 0.075, 0.03, 0, 'lr'],
-];
-function buildMuscles(rig, root) {
-  rig.muscles = []; rig.anchors = {};
-  const geo = new THREE.SphereGeometry(1, 24, 16), bp = new THREE.Vector3();
-  const place = (bone, x, y, z, rx, ry, rz, rot) => {
-    const b = rig.bones['mixamorig' + bone]; if (!b) return;
-    const anchor = rig.anchors[bone] ||= makeAnchor(b.bone, root);
-    root.worldToLocal(b.bone.getWorldPosition(bp));
-    const m = new THREE.Mesh(geo, SKIN_MATS.sculpt);
-    m.position.set(x - bp.x, y - bp.y, z - bp.z - Math.sign(z) * rz * 0.25); m.scale.set(rx * 0.92, ry * 0.95, rz * 0.7); m.rotation.z = rot;
-    m.castShadow = true; m.visible = false; m.renderOrder = 2; anchor.add(m); rig.muscles.push(m);
-  };
-  for (const [bone, x, y, z, rx, ry, rz, rot, mir] of MUSCLES) {
-    place(bone, x, y, z, rx, ry, rz, rot);
-    place(mir === 'lr' ? bone.replace('Left', 'Right') : bone, -x, y, z, rx, ry, rz, -rot);
-  }
-}
-
 function buildSkeletonParts(rig) {
   const add = (anchor, mesh, x, y, z) => { if (!anchor) return mesh; mesh.position.set(x, y, z); mesh.castShadow = true; mesh.visible = false; anchor.add(mesh); rig.skel.push(mesh); return mesh; };
   // Skull: cranium, cheekbones, eye sockets, nasal cavity, jaw, teeth
@@ -1427,7 +1374,6 @@ class HumanFigure {
       const anchor = name => { const b = model.getObjectByName(name); return b ? makeAnchor(b, this.root) : null; };
       rig.headA = anchor('mixamorigHead'); rig.chestA = anchor('mixamorigSpine1'); rig.hipA = anchor('mixamorigHips');
       buildSkeletonParts(rig);
-      if (key === 'male') buildMuscles(rig, this.root);
       this.rigs[key] = rig;
       onDone?.(rig);
     }, undefined, () => this.loadRig(key, urls, i + 1, onDone));
@@ -1455,8 +1401,6 @@ class HumanFigure {
     this.bellyM.material = style === 'skin' ? this.skin : SKIN_MATS[style];
     skeletonViz.set(style === 'skeleton' ? rig : null);
     this.face.visible = !this.sitting && !!rig.headA && style !== 'skeleton';
-    // Sculpted muscle definition rides along in every look except skeleton / costume
-    for (const m of rig.muscles || []) { m.visible = style !== 'skeleton' && style !== 'gloop'; m.material = style === 'skin' ? this.skin : SKIN_MATS[style]; }
     // Sculpt look: bald grey head like a ZBrush base mesh
     const sculpt = style === 'sculpt';
     this.face.traverse(o => { if (o.isMesh) { o.userData.mat0 ||= o.material; o.material = sculpt ? SKIN_MATS.sculpt : o.userData.mat0; } });
