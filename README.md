@@ -96,7 +96,7 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 
 ### 🧍 Characters
 - A rigged, animated human with a **pixel-mosaic censor** (we're classy here)
-- **Figures:** **realistic man** (default: textured, rigged character with idle / walk / run) · mannequin man · female (sitting on the toilet) · or load your own `.glb`
+- **Figures:** **nude man** (default, pixel-censored) · realistic man (clothed, textured, idle / walk / run) · female (sitting on the toilet) · or load your own `.glb`
 - **Skins:** realistic · **cartoon guy** (cel-shaded with ink outlines, big expressive head, mitts & red sneakers) · anatomy sculpt (smooth, lean ZBrush-style grey matcap) · skin tone · clay · muscle anatomy · **skeleton** · gold statue · chrome · Gloop costume
 - **Poses:** idle, sad slump, sneaky crouch, nodding, head shake, walk, run
 - **Facial expressions:** relieved, straining, embarrassed (with blush), surprised... with auto-blinking. **Auto mode** reacts to how full you are.
@@ -108,6 +108,7 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 - 🟢 **Slime target range:** creeping slimes, purple one-eyed **Gloop** monsters, tin cans, rubber ducks, traffic cones
 - 🔥 **Campfire:** put it out (sizzle + steam)
 - ⛄ **Snowman:** turns yellow, then melts. Yellow snow lingers. As it should.
+- 🌾 **Grass field:** 22,000 wind-swept grass blades, rolling hills, utility poles. Where the front page fades in.
 - 🌳 **Park:** tree + fire hydrant (classic)
 - 🗽 **New York street:** brick walk-ups with fire escapes, a parked yellow cab, hydrant, trash cans
 - 🏮 **Tokyo neon alley:** neon signs, a glowing vending machine, paper lanterns (crank the power to reach them)

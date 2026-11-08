@@ -279,7 +279,7 @@
   <section>
     <h2>Character</h2>
     <div class="row"><label>Figure</label><select data-key="figure" id="figureSel">
-      <option value="realman">Realistic man (default)</option><option value="male">Mannequin man (cartoon / sculpt looks)</option><option value="female">Female (sitting on the toilet)</option></select></div>
+      <option value="male">Nude man (default, censored)</option><option value="realman">Realistic man (clothed)</option><option value="female">Female (sitting on the toilet)</option></select></div>
     <div class="row"><label>Skin / costume</label><select data-key="skinStyle">
       <option value="skin">Realistic (default)</option><option value="cartoon">Cartoon guy (mannequin)</option><option value="sculpt">Anatomy sculpt</option><option value="clay">Clay sculpt</option><option value="muscle">Muscle anatomy</option>
       <option value="skeleton">Skeleton</option><option value="gold">Gold statue</option><option value="chrome">Chrome</option>
@@ -504,10 +504,11 @@ const SCENARIOS = {
   nyc:      { label: '🗽 New York street',      bg: '#1d2738', hemi: 0.8,  fog: [10, 45] },
   tokyo:    { label: '🏮 Tokyo neon alley',     bg: '#06050d', hemi: 0.35, fog: [8, 40], key: 0.35 },
   paris:    { label: '🥐 Paris boulevard',      bg: '#2b3552', hemi: 0.75, fog: [12, 75] },
+  field:    { label: '🌾 Grass field',          bg: '#d5e6ec', hemi: 1.15, fog: [14, 70] },
 };
 
 const state = {
-  labels: true, figure: 'realman', skinStyle: 'skin', pose: 'idle', expression: 'auto', studio: false,
+  labels: true, figure: 'male', skinStyle: 'skin', pose: 'idle', expression: 'auto', studio: false,
   scenario: 'bathroom', yaw: 0, flip: 0, roll: 0, spin: false, spinAxis: 'yaw', spinSpeed: 0.7, autoAim: false, autoFire: false,
   weight: 0.45, waist: 0.45, belly: 0.3, skin: 1,
   hydration: 0.6, fill: 0.55, aim: -0.42, bodyWater: 1,
@@ -588,6 +589,7 @@ const FLOOR_TEX = {
   nyc:      canvasTex(tile('#76777b', '#5c5d61'), 14),
   tokyo:    canvasTex(tile('#3a3b42', '#2b2c32'), 16),
   paris:    canvasTex(speckle('#8a8378', ['#9b9488', '#77705f', '#a8a090'], 2600, 7), 14),
+  field:    canvasTex(speckle('#4f7f37', ['#5d9142', '#44702f', '#6aa04b'], 3000, 6), 16),
 };
 const floorMat = new THREE.MeshStandardMaterial({ map: FLOOR_TEX.bathroom, roughness: 0.4, metalness: 0.05 });
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), floorMat);
@@ -1024,6 +1026,58 @@ buildCity('paris', {
     tower.position.set(-9, 0, 48); g.add(tower);
   },
 });
+
+/* ---- Grass field: instanced wind-swept blades, distant hills, utility poles and wires ---- */
+const grassTime = { value: 0 };
+{
+  const g = envGroups.field;
+  const N = 22000, BH = 0.3;
+  const blade = new THREE.PlaneGeometry(0.026, BH, 1, 4); blade.translate(0, BH / 2, 0);
+  const bp = blade.attributes.position;
+  for (let i = 0; i < bp.count; i++) bp.setX(i, bp.getX(i) * (1 - (bp.getY(i) / BH) * 0.92));   // taper to a point
+  const grassMat = new THREE.MeshLambertMaterial({ color: '#ffffff', side: THREE.DoubleSide });
+  grassMat.onBeforeCompile = sh => {
+    sh.uniforms.uTime = grassTime;
+    sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      vec4 root = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+      float h = clamp(position.y / ${BH.toFixed(2)}, 0.0, 1.0);
+      float gust = sin(uTime * 0.7 - root.x * 0.25 + root.z * 0.1) * 0.5 + 0.5;               // travelling gusts
+      float sway = (sin(uTime * 1.8 + root.x * 0.9 + root.z * 0.6) * 0.06 + gust * 0.16) * h * h;
+      transformed.x += sway; transformed.z += sway * 0.45;`);
+  };
+  const grass = new THREE.InstancedMesh(blade, grassMat, N);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color();
+  for (let i = 0; i < N; i++) {
+    let x, z;
+    do { const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 15; x = Math.cos(a) * r; z = Math.sin(a) * r; }
+    while (Math.hypot(x, z) < 0.5);                                         // keep the spot you stand on clear
+    const s = 0.55 + Math.random() * 0.9;
+    m.compose(p.set(x, 0, z), q.setFromEuler(e.set((Math.random() - 0.5) * 0.25, Math.random() * Math.PI, (Math.random() - 0.5) * 0.25)), sc.set(1, s, 1));
+    grass.setMatrixAt(i, m);
+    grass.setColorAt(i, col.setHSL(0.24 + Math.random() * 0.08, 0.45 + Math.random() * 0.2, 0.3 + Math.random() * 0.16));
+  }
+  grass.frustumCulled = false; g.add(grass);
+  // Rolling hills on the horizon
+  const hillMat = new THREE.MeshLambertMaterial({ color: '#8fae95' });
+  for (const [x, z, r, h] of [[-22, 30, 16, 5], [6, 36, 22, 7], [32, 24, 14, 4.5], [-34, -6, 15, 5], [26, -28, 18, 6], [-10, -34, 20, 6.5]]) {
+    const hill = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), hillMat);
+    hill.scale.set(r, h, r * 0.7); hill.position.set(x, 0, z); g.add(hill);
+  }
+  // A line of wooden utility poles with sagging wires
+  const wood = std('#4a3a2c', { roughness: 0.95 }), wireMat = new THREE.LineBasicMaterial({ color: '#2a2a2a' });
+  const tops = [];
+  for (let i = -3; i <= 3; i++) {
+    const x = i * 6, z = 7.5 + Math.sin(i) * 0.4;
+    const pole = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 6.5, 8), wood)); pole.position.set(x, 3.25, z); g.add(pole);
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 0.08), wood); bar.position.set(x, 6.0, z); g.add(bar);
+    tops.push([x, z]);
+  }
+  for (const dy of [-0.55, 0, 0.55]) for (let i = 0; i < tops.length - 1; i++) {
+    const [x1, z1] = tops[i], [x2, z2] = tops[i + 1], pts = [];
+    for (let k = 0; k <= 16; k++) { const f = k / 16; pts.push(new THREE.Vector3(x1 + (x2 - x1) * f + dy, 6.0 - Math.sin(f * Math.PI) * 0.45, z1 + (z2 - z1) * f)); }
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wireMat));
+  }
+}
 
 function respawnSlime(t) {
   const a = Math.random() * Math.PI * 2, r = 2.6 + Math.random() * 1.2;
@@ -2108,6 +2162,7 @@ const VIEWS = {
   macro: { pos: [0.42, 0.88, 0.32], target: [0, 0.7, 0.42] },
   cross: { pos: [1.35, 1.05, 0.25], target: [0, 0.98, 0.02] },
   wide:  { pos: [3.8, 3.2, -3.2],   target: [0, 0.4, 0.3] },
+  field: { pos: [3.1, 1.45, 2.6],   target: [0, 0.75, 0.55] },
 };
 let tween = null;
 function goView(name) {
@@ -2367,6 +2422,7 @@ function applyScenario(name) {
   const s = SCENARIOS[name]; if (!s) return;
   for (const [k, g] of Object.entries(envGroups)) g.visible = k === name;
   floorMat.map = FLOOR_TEX[name]; floorMat.needsUpdate = true;
+  floorMat.roughness = ['field', 'park', 'snow', 'campfire'].includes(name) ? 0.95 : 0.4;   // outdoor ground is matte
   scene.background.set(s.bg); scene.fog.color.set(s.bg);
   scene.fog.near = s.fog ? s.fog[0] : 7; scene.fog.far = s.fog ? s.fog[1] : 16;
   hemi.intensity = s.hemi;
@@ -2407,7 +2463,7 @@ function setValue(key, value) {
   }
   if (key === 'figure' && value === 'realman' && state.skinStyle === 'cartoon') { state.skinStyle = 'skin'; }
   if (key === 'pose') body.applyPose();
-  if (key === 'scenario' && value !== 'bathroom' && body.sitting) { state.figure = 'realman'; applyFigure('realman'); }
+  if (key === 'scenario' && value !== 'bathroom' && body.sitting) { state.figure = 'male'; applyFigure('male'); }
   if (key === 'scenario') { applyScenario(value); if (value === 'range' && !state.autoAim) state.autoAim = true; }
   if (key === 'overdrive' && value && !state.flowing) state.flowing = true;
   syncUI();
@@ -2600,6 +2656,7 @@ function frame() {
   body.update(dt, t);
   updatePeeBall(t);
   updateTargets(dt, t);
+  grassTime.value = t;
   updatePreview();
 
   for (const k of IMPACT_TYPES) impacts[k] = 0;
@@ -2834,10 +2891,14 @@ function hudFrame(dt) {
   $('opPlay').textContent = state.flowing ? '❚❚' : '▶';
 }
 
+// URL options used by the front page: ?scene=<scenario>  ?autostart (start peeing, keep cycling)  ?view=<camera preset>
+const URLP = new URLSearchParams(location.search);
+if (SCENARIOS[URLP.get('scene')]) state.scenario = URLP.get('scene');
+if (URLP.has('autostart')) { state.fill = 1; state.auto = true; state.flowing = true; }
 resetTargets();
 applyScenario(state.scenario);
 setValue('surface', state.surface);
-goView('side'); tween.t = 1;
+goView(VIEWS[URLP.get('view')] ? URLP.get('view') : 'side'); tween.t = 1;
 syncUI();
 requestAnimationFrame(frame);
 </script>
