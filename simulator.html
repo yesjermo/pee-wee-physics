@@ -259,7 +259,7 @@
   <div class="fld"><small>Operator</small><b>YOU · ON DUTY</b></div>
 </header>
 <div id="callouts"><svg></svg></div>
-<div id="statusChip"><small>MODE · SYSTEM STATE</small><b id="chipText">STANDBY</b><span id="chipSub"></span></div>
+<div id="statusChip"><small>MODE · SYSTEM STATE<span id="chipFace"></span></small><b id="chipText">STANDBY</b><span id="chipSub"></span></div>
 <div id="opLog">
   <div class="head">OPERATION LOG<span class="idx">LAST 60 S</span></div>
   <div class="rowx"><button id="opPlay" title="Release / stop (Space)">▶</button>
@@ -272,16 +272,16 @@
     <h2>Display</h2>
     <div class="btns" style="margin-bottom:6px">
       <button data-view="side">Side</button><button data-view="top">Top</button><button data-view="macro">Macro</button>
-      <button data-view="cross">X-Sect</button><button data-view="wide">Wide</button>
+      <button data-view="cross">X-Sect</button><button data-view="wide">Wide</button><button data-view="face">Face</button>
     </div>
     <div class="btns"><button id="btnLabels">Labels</button><button id="btnTurntable">Turntable</button><button id="btnStudio">Studio AO</button></div>
   </section>
   <section>
     <h2>Character</h2>
     <div class="row"><label>Figure</label><select data-key="figure" id="figureSel">
-      <option value="male">Nude man (default, censored)</option><option value="realman">Realistic man (clothed)</option><option value="female">Female (sitting on the toilet)</option></select></div>
+      <option value="male">Nude man (default, censored)</option><option value="female">Female (sitting on the toilet)</option></select></div>
     <div class="row"><label>Skin / costume</label><select data-key="skinStyle">
-      <option value="skin">Realistic (default)</option><option value="cartoon">Cartoon guy (mannequin)</option><option value="sculpt">Anatomy sculpt</option><option value="clay">Clay sculpt</option><option value="muscle">Muscle anatomy</option>
+      <option value="sculpt">Anatomy sculpt (default)</option><option value="skin">Skin tone</option><option value="cartoon">Cartoon guy</option><option value="clay">Clay sculpt</option><option value="muscle">Muscle anatomy</option>
       <option value="skeleton">Skeleton</option><option value="gold">Gold statue</option><option value="chrome">Chrome</option>
       <option value="gloop">Gloop costume (purple)</option></select></div>
     <div class="row"><label>Pose (standing figure)</label><select data-key="pose">
@@ -447,10 +447,6 @@ const HUMAN_MODEL_URLS = [          // rigged, MIT-licensed three.js example cha
   'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/models/gltf/Xbot.glb',
   'https://threejs.org/examples/models/gltf/Xbot.glb',
 ];
-const REALMAN_MODEL_URLS = [        // realistic, textured, rigged man (three.js example character)
-  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/models/gltf/Soldier.glb',
-  'https://threejs.org/examples/models/gltf/Soldier.glb',
-];
 const FEMALE_MODEL_URLS = [
   'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/models/gltf/Michelle.glb',
   'https://threejs.org/examples/models/gltf/Michelle.glb',
@@ -508,7 +504,7 @@ const SCENARIOS = {
 };
 
 const state = {
-  labels: true, figure: 'male', skinStyle: 'skin', pose: 'idle', expression: 'auto', studio: false,
+  labels: true, figure: 'male', skinStyle: 'sculpt', pose: 'idle', expression: 'auto', studio: false,
   scenario: 'bathroom', yaw: 0, flip: 0, roll: 0, spin: false, spinAxis: 'yaw', spinSpeed: 0.7, autoAim: false, autoFire: false,
   weight: 0.45, waist: 0.45, belly: 0.3, skin: 1,
   hydration: 0.6, fill: 0.55, aim: -0.42, bodyWater: 1,
@@ -1227,6 +1223,7 @@ function makeCensorTexture() {
   return tex;
 }
 
+const _glow = new THREE.Color(), GLOW_CALM = new THREE.Color('#4fd6e8'), GLOW_WARN = new THREE.Color('#ffb020'), GLOW_HOT = new THREE.Color('#ff3040');
 const _hip = new THREE.Vector3(), _pq = new THREE.Quaternion(), _pe = new THREE.Euler();
 
 /* ---- Skins / costumes ---- */
@@ -1388,6 +1385,229 @@ function buildCartoon(rig, root) {
   }
 }
 
+/* =====================================================================
+   Realistic head: a sculpted head mesh with eyes, lids, brows, nose, ears, hair and live-rebuilt lips,
+   attached to the rig's head bone. Driven by the expression system (smile / frown / open / teeth / brows / lids).
+   ===================================================================== */
+// Head centre relative to the head bone (metric, body-aligned). Scaled to fully enclose the rig's own head
+// (measured: ±8.8 cm wide, 21 cm tall, 13.8 cm in front / 11 cm behind the bone) so none of it pokes through.
+const PRO_HEAD = { pos: [0, 0.1, 0.02], scale: [1.18, 1.0, 1.22] };
+const gauss = (a, mu, s) => Math.exp(-(((a - mu) / s) ** 2));
+/** Sculpt a unit sphere into a human head (≈15.6 cm wide, 23.6 cm tall, 20 cm deep). */
+function sculptHead(geo) {
+  const p = geo.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const { x, y, z } = v, front = Math.max(z, 0);
+    let sx = 0.078, sy = 0.118, sz = 0.1;
+    if (y < -0.1) { const t = (-y - 0.1) / 0.9; sx *= 1 - 0.26 * t * t; sz *= 1 - 0.04 * t; }   // jaw tapers to the chin (gently: the rig's jaw is boxy)
+    if (z < 0) sz *= 1.08;                                                               // fuller back of the skull
+    let X = x * sx, Y = y * sy, Z = z * sz;
+    Z += 0.012 * gauss(y, -0.86, 0.16) * front;                                          // chin
+    Z += 0.006 * gauss(y, 0.24, 0.1) * gauss(x, 0, 0.5) * front;                         // brow ridge
+    for (const s of [-1, 1]) {
+      Z -= 0.011 * gauss(x, s * 0.4, 0.17) * gauss(y, 0.05, 0.12) * front;              // eye sockets
+      X += s * 0.004 * gauss(x, s * 0.62, 0.2) * gauss(y, -0.12, 0.15);                 // cheekbones
+      Z += 0.004 * gauss(x, s * 0.55, 0.2) * gauss(y, -0.12, 0.15) * front;
+    }
+    p.setXYZ(i, X, Y, Z);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+const PRO_MATS = {
+  sclera: new THREE.MeshPhysicalMaterial({ color: '#f3efe9', roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.05 }),
+  iris:   new THREE.MeshStandardMaterial({ color: '#5a3a22', roughness: 0.4 }),
+  pupil:  new THREE.MeshBasicMaterial({ color: '#070707' }),
+  glint:  new THREE.MeshBasicMaterial({ color: '#ffffff' }),
+  hair:   new THREE.MeshStandardMaterial({ color: '#2a1d14', roughness: 0.9 }),
+  lip:    new THREE.MeshPhysicalMaterial({ color: '#b06a5a', roughness: 0.45, clearcoat: 0.4, clearcoatRoughness: 0.3 }),
+  mouth:  new THREE.MeshBasicMaterial({ color: '#3b1612' }),
+  teeth:  new THREE.MeshStandardMaterial({ color: '#f4efe4', roughness: 0.3 }),
+  nostril: new THREE.MeshBasicMaterial({ color: '#4a2219' }),
+  blush:  new THREE.MeshBasicMaterial({ color: '#ff6f7d', transparent: true, opacity: 0.32, depthWrite: false }),
+};
+function buildProHead(rig, skinMat) {
+  if (!rig.headA) return;
+  const g = new THREE.Group(); g.position.set(...PRO_HEAD.pos); g.scale.set(...PRO_HEAD.scale); g.visible = false;
+  rig.headA.add(g);
+  const skinParts = [];
+  const add = (mesh, x, y, z, parent = g, skin = false) => { mesh.position.set(x, y, z); mesh.castShadow = true; parent.add(mesh); if (skin) skinParts.push(mesh); return mesh; };
+  add(new THREE.Mesh(sculptHead(new THREE.SphereGeometry(1, 72, 54)), skinMat), 0, 0, 0, g, true);
+  // short hair: the same sculpt, cropped to the crown, slightly larger, hairline set back
+  const hair = add(new THREE.Mesh(new THREE.SphereGeometry(1, 64, 24, 0, Math.PI * 2, 0, Math.PI * 0.42), PRO_MATS.hair), 0, 0.006, -0.012);
+  hair.scale.set(0.081, 0.122, 0.112); hair.rotation.x = -0.38;          // smooth dome, hairline high at the front
+  const P = { lidsU: [], brows: [], blush: [] };
+  for (const s of [-1, 1]) {
+    // eye: sclera, iris, pupil, catch-light, upper lid (rotates to blink), lower lid
+    const eye = new THREE.Group(); add(eye, s * 0.031, 0.006, 0.074);
+    eye.add(new THREE.Mesh(new THREE.SphereGeometry(0.0125, 24, 18), PRO_MATS.sclera));
+    const iris = new THREE.Mesh(new THREE.CircleGeometry(0.0058, 24), PRO_MATS.iris); iris.position.z = 0.0122; eye.add(iris);
+    const pupil = new THREE.Mesh(new THREE.CircleGeometry(0.0026, 16), PRO_MATS.pupil); pupil.position.z = 0.0124; eye.add(pupil);
+    const glint = new THREE.Mesh(new THREE.CircleGeometry(0.0011, 10), PRO_MATS.glint); glint.position.set(-0.0016, 0.0018, 0.0126); eye.add(glint);
+    const lidU = new THREE.Mesh(new THREE.SphereGeometry(0.0134, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), skinMat); lidU.rotation.x = -0.62; eye.add(lidU); skinParts.push(lidU);
+    const lidL = new THREE.Mesh(new THREE.SphereGeometry(0.0132, 24, 8, 0, Math.PI * 2, Math.PI * 0.78, Math.PI * 0.22), skinMat); lidL.rotation.x = -0.2; eye.add(lidL); skinParts.push(lidL);
+    lidU.userData.side = s; P.lidsU.push(lidU);
+    // arched brow, pivots at its middle
+    const browCurve = new THREE.CatmullRomCurve3([new THREE.Vector3(-0.016, -0.002, 0), new THREE.Vector3(-0.004, 0.003, 0.002), new THREE.Vector3(0.01, 0.002, 0.001), new THREE.Vector3(0.018, -0.003, -0.003)]);
+    const brow = add(new THREE.Mesh(new THREE.TubeGeometry(browCurve, 16, 0.0036, 6), PRO_MATS.hair), s * 0.032, 0.03, 0.088);
+    brow.scale.x = s; brow.userData = { side: s, y0: brow.position.y }; P.brows.push(brow);
+    // ear
+    const ear = add(new THREE.Mesh(new THREE.TorusGeometry(0.015, 0.006, 10, 20, Math.PI * 1.6), skinMat), s * 0.079, -0.006, -0.008, g, true);
+    ear.rotation.set(0, s * Math.PI / 2, Math.PI * 0.7); ear.scale.set(1, 1.35, 1);
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.009, 12, 10), skinMat), s * 0.076, -0.008, -0.008, g, true).scale.set(0.4, 1.4, 1);
+    // nose wing + nostril
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.0078, 14, 10), skinMat), s * 0.0105, -0.037, 0.096, g, true).scale.set(1, 0.85, 0.9);
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.0033, 10, 8), PRO_MATS.nostril), s * 0.0062, -0.043, 0.1).scale.set(1, 0.6, 0.8);
+    // cheek blush (embarrassed)
+    const b = add(new THREE.Mesh(new THREE.SphereGeometry(0.014, 14, 10), PRO_MATS.blush), s * 0.046, -0.026, 0.074); b.scale.z = 0.35; P.blush.push(b);
+  }
+  // nose bridge + tip
+  const bridge = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.0066, 0.03, 6, 12), skinMat), 0, -0.012, 0.094, g, true); bridge.rotation.x = -0.32;
+  add(new THREE.Mesh(new THREE.SphereGeometry(0.0108, 16, 12), skinMat), 0, -0.033, 0.104, g, true).scale.set(1, 0.95, 0.95);
+  // mouth: dark interior + teeth behind live-rebuilt lips
+  P.mouthIn = add(new THREE.Mesh(new THREE.CircleGeometry(0.019, 24), PRO_MATS.mouth), 0, -0.062, 0.084);
+  P.teeth = add(new THREE.Mesh(new RoundedBoxGeometry(0.03, 0.007, 0.006, 2, 0.002), PRO_MATS.teeth), 0, -0.057, 0.084);
+  P.lipU = add(new THREE.Mesh(new THREE.BufferGeometry(), PRO_MATS.lip), 0, -0.06, 0.087);
+  P.lipL = add(new THREE.Mesh(new THREE.BufferGeometry(), PRO_MATS.lip), 0, -0.06, 0.087);
+  P.cur = { smile: 0, open: 0, teeth: 0 }; P.built = { smile: 9, open: 9 };
+  P.group = g; P.skinParts = skinParts; P.hair = hair;
+  // non-skin features remember their material, plus a statue variant for the grey sculpt look
+  const STATUE = { [PRO_MATS.pupil.uuid]: new THREE.MeshBasicMaterial({ color: '#3d3d3d' }), [PRO_MATS.mouth.uuid]: new THREE.MeshBasicMaterial({ color: '#4a4a4a' }),
+    [PRO_MATS.nostril.uuid]: new THREE.MeshBasicMaterial({ color: '#5a5a5a' }), [PRO_MATS.glint.uuid]: PRO_MATS.glint, [PRO_MATS.blush.uuid]: PRO_MATS.blush };
+  P.features = [];
+  g.traverse(o => { if (o.isMesh && !skinParts.includes(o) && o !== hair) { o.userData.mat0 = o.material; o.userData.statue = STATUE[o.material.uuid]; P.features.push(o); } });
+  rig.pro = P;
+}
+/** Rebuild the lip tubes for a smile (-1 frown … 1 smile) and an open amount (0 … 1). */
+const _lp = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+function buildLips(P, smile, open) {
+  const w = 0.028 + smile * 0.004, c = smile * 0.013, o = open;
+  const lip = (pts, r) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p => p.clone())), 24, r, 8);
+  const U = [_lp[0].set(-w, c, -0.004), _lp[1].set(-w * 0.5, 0.0035 + o * 0.006, 0.002), _lp[2].set(0, 0.005 + o * 0.007, 0.004), _lp[3].set(w * 0.5, 0.0035 + o * 0.006, 0.002), _lp[4].set(w, c, -0.004)];
+  const nu = lip(U, 0.0042);
+  const L = [_lp[0].set(-w, c, -0.004), _lp[1].set(-w * 0.5, -0.004 - o * 0.014, 0.002), _lp[2].set(0, -0.0055 - o * 0.018, 0.004), _lp[3].set(w * 0.5, -0.004 - o * 0.014, 0.002), _lp[4].set(w, c, -0.004)];
+  const nl = lip(L, 0.0054);
+  P.lipU.geometry.dispose(); P.lipU.geometry = nu;      // dispose the previous build (no GPU leaks)
+  P.lipL.geometry.dispose(); P.lipL.geometry = nl;
+  P.built.smile = smile; P.built.open = open;
+}
+/** Per-expression targets for the realistic face. */
+function proTargets(ex) {
+  const m = ex.mouth;
+  return {
+    smile: m === 'smile' ? 1 : m === 'frown' ? -0.85 : m === 'grit' ? 0.25 : 0,
+    open: m === 'o' ? 0.95 : m === 'grit' ? 0.3 : m === 'smile' && ex.lid > 1 ? 0.05 : m === 'smile' ? 0.25 : 0,
+    teeth: m === 'grit' || (m === 'smile' && ex.lid <= 1) ? 1 : 0,
+  };
+}
+
+/* =====================================================================
+   Sculpted anatomy: a smooth muscle "height field" pushed along the skin normal in the vertex shader,
+   in bind-pose space (so it follows every animation), with the normals bent by the field's gradient so
+   the lighting reads every bulge and groove. No extra meshes, so no seams or circles.
+   ===================================================================== */
+// [x, y, z, sigmaX, sigmaY, sigmaZ, amplitude (m, + bulge / - groove), mirror] in body root space at the T-pose
+const MUSCLE_FIELD = [
+  [0.072, 1.33, 0.11,   0.06, 0.042, 0.05,   0.011, 1],   // pectoralis major
+  [0.07, 1.284, 0.115,  0.065, 0.009, 0.05, -0.004, 1],   // lower edge of the pecs
+  [0.075, 1.452, 0.05,  0.06, 0.008, 0.05,   0.003, 1],   // collarbone ridge
+  [0.024, 1.53, 0.0,    0.011, 0.04, 0.05,   0.0035, 1],  // sternocleidomastoid
+  [0.07, 1.47, -0.07,   0.05, 0.022, 0.05,   0.007, 1],   // trapezius
+  [0.028, 1.235, 0.11,  0.019, 0.02, 0.05,   0.0045, 1],  // rectus abdominis: 8-pack, row 1
+  [0.028, 1.183, 0.1,   0.019, 0.02, 0.05,   0.0045, 1],  //   row 2
+  [0.028, 1.128, 0.095, 0.019, 0.021, 0.05,  0.0045, 1],  //   row 3
+  [0.027, 1.072, 0.1,   0.018, 0.024, 0.05,  0.004, 1],   //   row 4
+  [0, 1.16, 0.1,        0.0045, 0.13, 0.06, -0.003, 0],   // linea alba (centre groove)
+  [0.1, 1.1, 0.06,      0.028, 0.06, 0.06,   0.005, 1],   // external oblique
+  [0.078, 1.0, 0.1,     0.01, 0.05, 0.05,   -0.003, 1],   // inguinal "V" line
+  [0.113, 1.27, 0.07,   0.018, 0.007, 0.05,  0.003, 1],   // serratus anterior
+  [0.117, 1.24, 0.066,  0.018, 0.007, 0.05,  0.003, 1],
+  [0.119, 1.21, 0.06,   0.018, 0.007, 0.05,  0.003, 1],
+  [0.12, 1.25, -0.045,  0.028, 0.08, 0.05,   0.006, 1],   // latissimus dorsi
+  [0.066, 0.93, -0.088, 0.05, 0.05, 0.05,    0.007, 1],   // gluteus
+  [0.19, 1.44, -0.065,  0.045, 0.042, 0.055, 0.008, 1],   // deltoid (T-pose: left arm runs along +X)
+  [0.32, 1.434, -0.04,  0.055, 0.022, 0.045, 0.007, 1],   // biceps
+  [0.31, 1.43, -0.105,  0.06, 0.022, 0.045,  0.006, 1],   // triceps
+  [0.53, 1.45, -0.07,   0.055, 0.02, 0.045,  0.005, 1],   // brachioradialis
+  [0.095, 0.74, 0.072,  0.028, 0.11, 0.05,   0.006, 1],   // rectus femoris
+  [0.12, 0.72, 0.045,   0.026, 0.1, 0.05,    0.005, 1],   // vastus lateralis
+  [0.07, 0.6, 0.06,     0.022, 0.04, 0.05,   0.007, 1],   // vastus medialis "teardrop"
+  [0.1, 0.39, -0.08,    0.026, 0.07, 0.05,   0.008, 1],   // gastrocnemius
+  [0.1, 0.33, 0.035,    0.013, 0.08, 0.05,   0.003, 1],   // tibialis anterior
+];
+const MUSCLE_N = 56;
+const MUSCLE_GAIN = 1.8, MUSCLE_SHADE = 2.5;   // sculpt-style exaggeration of relief (height) and of how strongly it shades
+
+/** Solve the 4x4 normal equations (XᵀX)·B = XᵀY for B (4x3) by Gaussian elimination. */
+function solve4(A, Y) {
+  const M = A.map((row, i) => [...row, ...Y[i]]);
+  for (let c = 0; c < 4; c++) {
+    let p = c; for (let r = c + 1; r < 4; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];
+    for (let r = 0; r < 4; r++) if (r !== c) { const f = M[r][c] / M[c][c]; for (let k = c; k < 7; k++) M[r][k] -= f * M[c][k]; }
+  }
+  return M.map((row, i) => [row[4] / row[i], row[5] / row[i], row[6] / row[i]]);
+}
+
+/** Map the muscle field from body root space into the mesh's own geometry space (fit from bind-pose vertices). */
+function buildMuscleField(rig, root) {
+  const mesh = rig.meshes.map(m => m.mesh).find(m => m.isSkinnedMesh && /surface/i.test(m.name)) || rig.meshes.map(m => m.mesh).find(m => m.isSkinnedMesh);
+  if (!mesh) return;
+  const pos = mesh.geometry.attributes.position, step = Math.max(1, Math.floor(pos.count / 500));
+  const XtX = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], XtY = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  const g = new THREE.Vector3(), w = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i += step) {
+    g.fromBufferAttribute(pos, i); mesh.getVertexPosition(i, w); mesh.localToWorld(w); root.worldToLocal(w);
+    const x = [g.x, g.y, g.z, 1], y = [w.x, w.y, w.z];
+    for (let a = 0; a < 4; a++) { for (let b = 0; b < 4; b++) XtX[a][b] += x[a] * x[b]; for (let c = 0; c < 3; c++) XtY[a][c] += x[a] * y[c]; }
+  }
+  const B = solve4(XtX, XtY);                 // root = B[0]·gx + B[1]·gy + B[2]·gz + B[3]
+  const toRoot = new THREE.Matrix4().set(B[0][0], B[1][0], B[2][0], B[3][0], B[0][1], B[1][1], B[2][1], B[3][1], B[0][2], B[1][2], B[2][2], B[3][2], 0, 0, 0, 1);
+  const toGeo = toRoot.clone().invert(), e = toGeo.elements, s = Math.cbrt(Math.abs(toGeo.determinant()));
+  const absLin = v => new THREE.Vector3(Math.abs(e[0]) * v.x + Math.abs(e[4]) * v.y + Math.abs(e[8]) * v.z,
+    Math.abs(e[1]) * v.x + Math.abs(e[5]) * v.y + Math.abs(e[9]) * v.z, Math.abs(e[2]) * v.x + Math.abs(e[6]) * v.y + Math.abs(e[10]) * v.z);
+  const C = [], Rr = [];
+  const push = (x, y, z, rx, ry, rz, a) => {
+    const c = new THREE.Vector3(x, y, z).applyMatrix4(toGeo); C.push(new THREE.Vector4(c.x, c.y, c.z, a * s * MUSCLE_GAIN)); Rr.push(absLin(new THREE.Vector3(rx, ry, rz)));
+  };
+  for (const [x, y, z, rx, ry, rz, a, mir] of MUSCLE_FIELD) { push(x, y, z, rx, ry, rz, a); if (mir) push(-x, y, z, rx, ry, rz, a); }
+  while (C.length < MUSCLE_N) { C.push(new THREE.Vector4(0, 0, 0, 0)); Rr.push(new THREE.Vector3(1, 1, 1)); }
+  rig.muscleU = { uMC: { value: C.slice(0, MUSCLE_N) }, uMR: { value: Rr.slice(0, MUSCLE_N) }, uMStrength: { value: 1 } };
+  rig.muscleMats = {};
+}
+
+/** A clone of `base` with the muscle field injected (cached per base material, kept in sync every frame). */
+function muscleMaterial(rig, base) {
+  if (rig.muscleMats[base.uuid]) return rig.muscleMats[base.uuid];
+  const m = base.clone(); m.userData.base = base;
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, rig.muscleU);
+    sh.vertexShader = `uniform vec4 uMC[${MUSCLE_N}];
+uniform vec3 uMR[${MUSCLE_N}];
+uniform float uMStrength;
+float muscleField(vec3 p, out vec3 grad) {
+  float d = 0.0; grad = vec3(0.0);
+  for (int i = 0; i < ${MUSCLE_N}; i++) {
+    vec3 q = (p - uMC[i].xyz) / uMR[i];
+    float e = uMC[i].w * exp(-dot(q, q));
+    d += e; grad += e * (-2.0 * q / uMR[i]);
+  }
+  return d;
+}
+` + sh.vertexShader
+      .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+  vec3 mGrad; float mDisp = muscleField(position, mGrad) * uMStrength; mGrad *= uMStrength * ${MUSCLE_SHADE.toFixed(2)};
+  objectNormal = normalize(objectNormal - (mGrad - dot(mGrad, objectNormal) * objectNormal));
+  vec3 mN = objectNormal;   // keep the bind-space normal: skinning rescales objectNormal before <begin_vertex>`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+  transformed += mN * mDisp;`);
+  };
+  m.customProgramCacheKey = () => 'muscle-' + base.type;
+  rig.muscleMats[base.uuid] = m;
+  return m;
+}
+
 function buildSkeletonParts(rig) {
   const add = (anchor, mesh, x, y, z) => { if (!anchor) return mesh; mesh.position.set(x, y, z); mesh.castShadow = true; mesh.visible = false; anchor.add(mesh); rig.skel.push(mesh); return mesh; };
   // Skull: cranium, cheekbones, eye sockets, nasal cavity, jaw, teeth
@@ -1450,7 +1670,7 @@ class HumanFigure {
     this.root = new THREE.Group(); this.root.position.y = -PIVOT_Y; this.pivot.add(this.root);
     this.clipPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
     this.skin = new THREE.MeshPhysicalMaterial({
-      color: SKIN_TONE, roughness: 0.55, sheen: 0.6, sheenColor: new THREE.Color('#ffd7c2'), sheenRoughness: 0.6,
+      color: SKIN_TONE, roughness: 0.5, specularIntensity: 0.35, sheen: 0.7, sheenColor: new THREE.Color('#ffc9b0'), sheenRoughness: 0.5,
       clearcoat: 0.15, transparent: false, opacity: 1, side: THREE.DoubleSide, clippingPlanes: [],
     });
     const part = (geo, x, y, z, mat = this.skin, parent = this.root) => {
@@ -1591,8 +1811,7 @@ class HumanFigure {
     this.fluid.position.copy(this.bladder.position);
 
     const urge = THREE.MathUtils.smoothstep(state.fill, 0.4, 1);
-    const glow = new THREE.Color('#4fd6e8').lerp(new THREE.Color('#ffb020'), Math.min(1, urge * 1.6))
-      .lerp(new THREE.Color('#ff3040'), Math.max(0, urge * 2 - 1));
+    const glow = _glow.copy(GLOW_CALM).lerp(GLOW_WARN, Math.min(1, urge * 1.6)).lerp(GLOW_HOT, Math.max(0, urge * 2 - 1));
     this.bladderMat.emissive.copy(glow);
     this.bladderMat.emissiveIntensity = 0.15 + urge * 0.9 * (state.fill > 0.9 ? 0.7 + 0.3 * Math.sin(t * 8) : 1);
     this.bladderMat.opacity = 0.25 + 0.35 * urge;
@@ -1613,6 +1832,11 @@ class HumanFigure {
       this.rig.wrap.position.y = this.sitting ? SIT.hipY - this.rig.hipY0 : 0;
       if (!state.dissolved) this.mixer.update(dt);
       if (this.sitting) this.poseBones(SIT.bones);
+    }
+    if (this.rig?.muscleMats) for (const m of Object.values(this.rig.muscleMats)) {
+      const b = m.userData.base;
+      if (m.transparent !== b.transparent || m.clippingPlanes.length !== b.clippingPlanes.length) { m.transparent = b.transparent; m.clippingPlanes = b.clippingPlanes; m.needsUpdate = true; }
+      m.opacity = b.opacity; m.depthWrite = b.depthWrite; if (m.color && b.color) m.color.copy(b.color);
     }
     this.updateFace(dt, t);
     if (Math.abs(wf - this._lastWeight) > 0.002) {
@@ -1679,7 +1903,6 @@ class HumanFigure {
       const height = key === 'female' ? 1.68 : 1.8, k = height / h;
       model.scale.multiplyScalar(k);
       model.position.set(-(box.min.x + box.max.x) / 2 * k, -box.min.y * k, -(box.min.z + box.max.z) / 2 * k);
-      if (key === 'realman') model.rotation.y = Math.PI;      // this model is authored facing -Z; the simulator expects +Z
       const wrap = new THREE.Group(); wrap.add(model); wrap.visible = false; this.root.add(wrap);
       const rig = { key, wrap, model, height, meshes: [], bones: {}, clips: gltf.animations, mixer: new THREE.AnimationMixer(model),
         hips: model.getObjectByName('mixamorigHips'), head: model.getObjectByName('mixamorigHead'), skel: [] };
@@ -1694,6 +1917,7 @@ class HumanFigure {
       rig.headA = anchor('mixamorigHead'); rig.chestA = anchor('mixamorigSpine1'); rig.hipA = anchor('mixamorigHips');
       buildSkeletonParts(rig);
       if (key === 'male') { buildCartoon(rig, this.root); addSkinnedInk(rig); }
+      if (key === 'male') { buildProHead(rig, this.skin); buildMuscleField(rig, this.root); }
       this.rigs[key] = rig;
       onDone?.(rig);
     }, undefined, () => this.loadRig(key, urls, i + 1, onDone));
@@ -1706,7 +1930,7 @@ class HumanFigure {
     this.rig = rig; this.model = rig.model; this.hips = rig.hips; this.mixer = rig.mixer;
     for (const o of this.procObjects) if (o !== this.bellyM && o !== this.face) o.visible = false;
     this.sitting = key === 'female';
-    rig.ownFace = key === 'female' || key === 'realman';          // textured characters keep their own face
+    rig.ownFace = key === 'female';                               // the female keeps her own textured face
     this.bellyM.visible = key === 'male';
     if (rig.headA && !rig.ownFace) { rig.headA.add(this.face); this.face.position.set(...FACE_ON_RIG.pos); this.face.scale.setScalar(FACE_ON_RIG.scale); }
     this.applySkin(); this.applyPose();
@@ -1718,13 +1942,24 @@ class HumanFigure {
     const rig = this.rig; if (!rig) return;
     const style = state.skinStyle;
     const keepOwn = style === 'skin' || (style === 'cartoon' && rig.key !== 'male');   // female keeps her own textures in skin/cartoon looks
-    for (const { mesh, orig } of rig.meshes) mesh.material = keepOwn ? (rig.key === 'male' ? this.skin : orig) : SKIN_MATS[style];
+    for (const { mesh, orig } of rig.meshes) {
+      let mat = keepOwn ? (rig.key === 'male' ? this.skin : orig) : SKIN_MATS[style];
+      if (rig.muscleU && mesh.isSkinnedMesh && !['cartoon', 'skeleton', 'gloop'].includes(style)) mat = muscleMaterial(rig, mat);
+      mesh.material = mat;
+    }
     for (const p of rig.toon || []) p.visible = style === 'cartoon' && rig.key === 'male';
     for (const { mesh } of rig.meshes) mesh.receiveShadow = style !== 'cartoon';   // no self-shadow bands on cel shading
     for (const p of rig.skel) p.visible = style === 'skeleton';
     this.bellyM.material = style === 'skin' ? this.skin : SKIN_MATS[style];
     skeletonViz.set(style === 'skeleton' ? rig : null);
-    this.face.visible = !this.sitting && !rig.ownFace && !!rig.headA && style !== 'skeleton' && !(style === 'cartoon' && rig.toon);
+    this.face.visible = !this.sitting && !rig.ownFace && !rig.pro && !!rig.headA && style !== 'skeleton' && !(style === 'cartoon' && rig.toon);
+    if (rig.pro) {
+      const P = rig.pro, headMat = (style === 'skin' || style === 'cartoon') ? this.skin : SKIN_MATS[style];
+      P.group.visible = !this.sitting && !['cartoon', 'skeleton', 'gloop'].includes(style);
+      for (const m of P.skinParts) m.material = headMat;
+      P.hair.visible = style !== 'sculpt';
+      for (const m of P.features) m.material = style === 'sculpt' ? (m.userData.statue || SKIN_MATS.sculpt) : m.userData.mat0;
+    }
     // Sculpt look: bald grey head like a ZBrush base mesh
     const sculpt = style === 'sculpt';
     this.face.traverse(o => { if (o.isMesh) { o.userData.mat0 ||= o.material; o.material = sculpt ? SKIN_MATS.sculpt : o.userData.mat0; } });
@@ -1754,7 +1989,8 @@ class HumanFigure {
     const sets = [];
     if (this.face.visible) sets.push(this);
     if (this.rig?.toonFace && this.rig.toon[0]?.visible) sets.push(this.rig.toonFace);
-    if (!sets.length) return;
+    const P = this.rig?.pro && this.rig.pro.group.visible ? this.rig.pro : null;
+    if (!sets.length && !P) return;
     let name = state.expression;
     if (name === 'auto') {
       name = state.dissolved || sim.submerged > 0 || state.bodyWater < 0.3 ? 'surprised'
@@ -1766,6 +2002,22 @@ class HumanFigure {
     if (this._blink < -0.13) this._blink = 2.5 + Math.random() * 3;
     const lid = this._blink < 0 ? 1.5 : ex.lid;
     const f = Math.min(1, dt * 12);
+    this.expressionName = name;
+    if (P) {
+      const tg = proTargets(ex), k = Math.min(1, dt * 9);
+      P.cur.smile += (tg.smile - P.cur.smile) * k; P.cur.open += (tg.open - P.cur.open) * k; P.cur.teeth += (tg.teeth - P.cur.teeth) * k;
+      if (Math.abs(P.cur.smile - P.built.smile) > 0.01 || Math.abs(P.cur.open - P.built.open) > 0.01) buildLips(P, P.cur.smile, P.cur.open);
+      P.mouthIn.scale.set(1, Math.max(0.02, P.cur.open * 0.9 + 0.05), 1);
+      P.mouthIn.visible = P.cur.open > 0.04 || P.cur.teeth > 0.3;
+      P.teeth.visible = P.cur.teeth > 0.3; P.teeth.position.y = -0.057 + P.cur.open * 0.004;
+      const close = Math.min(1, lid / 1.5);
+      for (const l of P.lidsU) l.rotation.x += (THREE.MathUtils.lerp(-0.62, 1.6, close) - l.rotation.x) * f;
+      for (const b of P.brows) {
+        b.rotation.z += ((-b.userData.side * ex.brow * 0.9) - b.rotation.z) * f;      // furrow: inner ends down (angry/strained)
+        b.position.y += ((b.userData.y0 + ex.browY * 0.9) - b.position.y) * f;          // raise: surprised / relieved
+      }
+      for (const c of P.blush) c.visible = !!ex.blush;
+    }
     for (const S of sets) {
       for (const l of S.lids) l.rotation.x += (THREE.MathUtils.lerp(0.2, 1.55, Math.min(1, lid / 1.5)) - l.rotation.x) * f;
       for (const b of S.brows) {
@@ -1782,7 +2034,7 @@ const body = new HumanFigure();
 scene.add(body.pivot);
 window.hydrosim = { body, state, sim, THREE, SIT, targets, score };   // handy for debugging in the console
 body.rigs = {};
-const FIGURE_URLS = { realman: REALMAN_MODEL_URLS, male: HUMAN_MODEL_URLS, female: FEMALE_MODEL_URLS };
+const FIGURE_URLS = { male: HUMAN_MODEL_URLS, female: FEMALE_MODEL_URLS };
 body.loadRig(state.figure, FIGURE_URLS[state.figure], 0, rig => {
   if (rig && state.figure === rig.key) body.activate(rig.key);
   document.getElementById('modelNote').textContent = rig ? '' : 'Could not load the rigged body: using the built-in mannequin.';
@@ -2163,13 +2415,20 @@ const VIEWS = {
   cross: { pos: [1.35, 1.05, 0.25], target: [0, 0.98, 0.02] },
   wide:  { pos: [3.8, 3.2, -3.2],   target: [0, 0.4, 0.3] },
   field: { pos: [3.1, 1.45, 2.6],   target: [0, 0.75, 0.55] },
+  face:  { pos: [0, 0, 0], target: [0, 0, 0] },              // computed from the head bone at the moment you press it
 };
 let tween = null;
 function goView(name) {
   const v = VIEWS[name]; if (!v) return;
   state.view = name;
-  tween = { t: 0, fromP: camera.position.clone(), fromT: controls.target.clone(),
-    toP: new THREE.Vector3(...v.pos), toT: new THREE.Vector3(...v.target) };
+  let toP = new THREE.Vector3(...v.pos), toT = new THREE.Vector3(...v.target);
+  if (name === 'face') {                                   // close-up on the face, in front of the body and slightly to the side
+    const head = body.rig?.bones['mixamorigHead']?.bone;
+    if (head) head.getWorldPosition(toT).add(new THREE.Vector3(0, 0.09, 0)); else toT.set(0, 1.62, 0);
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(body.pivot.quaternion), side = new THREE.Vector3(1, 0, 0).applyQuaternion(body.pivot.quaternion);
+    toP.copy(toT).addScaledVector(fwd, 0.62).addScaledVector(side, 0.16).add(new THREE.Vector3(0, 0.02, 0));
+  }
+  tween = { t: 0, fromP: camera.position.clone(), fromT: controls.target.clone(), toP, toT };
   body.setCrossSection(name === 'cross');
   document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === name));
 }
@@ -2458,10 +2717,9 @@ function setValue(key, value) {
   if (key === 'autoFire' && value) state.autoAim = true;
   if (key === 'figure') applyFigure(value);
   if (key === 'skinStyle') {
-    if (value === 'cartoon' && state.figure === 'realman') { state.figure = 'male'; applyFigure('male'); }
     body.applySkin();
   }
-  if (key === 'figure' && value === 'realman' && state.skinStyle === 'cartoon') { state.skinStyle = 'skin'; }
+
   if (key === 'pose') body.applyPose();
   if (key === 'scenario' && value !== 'bathroom' && body.sitting) { state.figure = 'male'; applyFigure('male'); }
   if (key === 'scenario') { applyScenario(value); if (value === 'range' && !state.autoAim) state.autoAim = true; }
@@ -2870,6 +3128,7 @@ function hudFrame(dt) {
   $('hdrTime').textContent = mmss(run);
   $('hdrStatus').textContent = status; $('hdrDot').classList.toggle('on', active);
   $('chipText').textContent = status; $('chipSub').textContent = sub;
+  $('chipFace').textContent = body.expressionName && (body.rig?.pro?.group.visible || body.face.visible || body.rig?.toon?.[0]?.visible) ? ' · FACE: ' + body.expressionName.toUpperCase() : '';
   $('hudMl').textContent = Math.round(state.fill * CAPACITY_ML);
   $('hudUrge').textContent = urgeText(state.fill);
   drawSpark();
