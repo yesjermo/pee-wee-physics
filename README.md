@@ -97,7 +97,7 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 ### 🧍 Characters
 - A rigged, animated human with a **pixel-mosaic censor** (we're classy here)
 - **Figures:** **nude man** (default, pixel-censored): anatomy sculpt with muscle definition sculpted into the skin in the vertex shader (pecs, 8-pack, obliques, delts, biceps, quads, calves…) and a realistic expressive head · female (sitting on the toilet) · or load your own `.glb`
-- **Skins:** **anatomy sculpt** (default: ZBrush-style grey with sculpted muscles and a statue face) · skin tone · **cartoon guy** (cel-shaded with ink outlines, big expressive head, mitts & red sneakers) · clay · muscle anatomy · **skeleton** · gold statue · chrome · Gloop costume
+- **Skins:** **skeleton** (default: ghost body with skull, ribcage, spine, pelvis and limb bones that follow every animation) · anatomy sculpt (ZBrush-style grey with sculpted muscles and a statue face) · skin tone · clay · muscle anatomy · gold statue · chrome · Gloop costume
 - **Poses:** idle, sad slump, sneaky crouch, nodding, head shake, walk, run
 - **Facial expressions:** relieved, straining, embarrassed (with blush), surprised... with auto-blinking. **Auto mode** reacts to how full you are.
 - **Female figure** sitting on the toilet (clothed)
