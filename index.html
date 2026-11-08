@@ -15,6 +15,10 @@
   /* ---------- splash: black & white message-board typing ---------- */
   #splash { position: fixed; inset: 0; z-index: 100; background: #000; color: #f2f2f2; overflow: hidden; cursor: pointer; transition: opacity .9s ease; }
   #splash.out { opacity: 0; pointer-events: none; }
+  #splash.dissolve { transition: opacity 5.5s ease-in-out; opacity: 0; pointer-events: none; }   /* slow fade into the field */
+  #gate { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; font: 400 12px/2 'JetBrains Mono', monospace; letter-spacing: .3em; color: #d8d8d8; }
+  #gate b { display: block; font-weight: 400; color: #fff; letter-spacing: .5em; }
+  #gate.gone { display: none; }
   #splash .scan { position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0 1px, transparent 1px 3px); }
   #splash .bbshead { position: absolute; top: 6vh; left: 8vw; right: 8vw; display: flex; justify-content: space-between; border: 1px solid #f2f2f2; padding: 7px 12px;
     font: 400 11px 'JetBrains Mono', monospace; letter-spacing: .22em; opacity: 0; transition: opacity 1.2s ease; }
@@ -39,24 +43,26 @@
 <body>
 
 <!-- The full simulator, exactly as on simulator.html -->
-<iframe id="app" src="simulator.html" title="urinal-physics: 3D hydration and fluid simulator" allow="autoplay; fullscreen"></iframe>
+<iframe id="app" src="simulator.html?scene=field&amp;autostart&amp;view=field" title="urinal-physics: 3D hydration and fluid simulator" allow="autoplay; fullscreen"></iframe>
 
 <!-- Splash intro on top -->
 <div id="splash" role="dialog" aria-label="Intro">
+  <div id="gate"><div>ether-bbs<br>── no carrier ──<b>▸ click to connect</b><small style="opacity:.5">(sound on)</small></div></div>
   <div id="flash">水のエーテル</div>
   <div class="bbshead"><span>■ ether-bbs ／ board: 水 water</span><span>online: 3</span></div>
   <div id="bbs" aria-live="polite"></div>
   <div class="scan"></div>
-  <button id="enter">enter ▸</button>
-  <div class="hint">click anywhere · press any key</div>
+  <button id="enter">skip ▸</button>
+  <div class="hint">the field opens when the board goes quiet</div>
 </div>
 
 <script>
-/* Splash: black screen, title flash, then message-board posts typing in (all original text).
-   Shows once per browser session; add ?splash to the URL to always play it. */
+/* Splash: a black "connect" gate (the click unlocks audio), a title flash, then message-board posts typing in
+   with synthesized keyboard sounds; when the board goes quiet it slowly dissolves into the grass field scene.
+   All text is original. Shows once per browser session; ?splash in the URL always plays it. */
 (() => {
-  const splash = document.getElementById('splash'), bbs = document.getElementById('bbs'), flash = document.getElementById('flash');
-  const app = document.getElementById('app');
+  const splash = document.getElementById('splash'), gate = document.getElementById('gate');
+  const bbs = document.getElementById('bbs'), flash = document.getElementById('flash'), app = document.getElementById('app');
   const POSTS = [
     ['seiryu',      'the field is quiet tonight. only the wind and the pipes.'],
     ['water_ether', 'from the next room it sounds like rain.'],
@@ -65,10 +71,44 @@
     ['anonymous',   'the stream goes up. the stream comes down. that is all physics is.'],
     ['water_ether', 'flush before you leave. the ether remembers.'],
   ];
-  let alive = true, pi = 0;
+  let alive = true, pi = 0, started = false, ctx = null, master = null, hum = null;
+
+  /* ---- sound: keyboard clicks + a faint CRT hum, all synthesized ---- */
+  function audioInit() {
+    try {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      master = ctx.createGain(); master.gain.value = 0.8; master.connect(ctx.destination);
+      // CRT / room hum: quiet 60 Hz + 120 Hz with a little low-passed noise
+      hum = ctx.createGain(); hum.gain.value = 0; hum.connect(master);
+      for (const [f, v] of [[60, 0.035], [120, 0.015]]) { const o = ctx.createOscillator(); o.frequency.value = f; const g = ctx.createGain(); g.gain.value = v; o.connect(g).connect(hum); o.start(); }
+      const nb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = nb.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.5;
+      const ns = ctx.createBufferSource(); ns.buffer = nb; ns.loop = true;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500;
+      const ng = ctx.createGain(); ng.gain.value = 0.02; ns.connect(lp).connect(ng).connect(hum); ns.start();
+      hum.gain.setTargetAtTime(1, ctx.currentTime, 0.8);
+    } catch (e) { ctx = null; }
+  }
+  function key(big = false) {
+    if (!ctx) return;
+    const t = ctx.currentTime, len = big ? 0.07 : 0.03;
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * len), ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, big ? 3 : 6);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.3; bp.frequency.value = big ? 1300 : 2300 + Math.random() * 2000;
+    const g = ctx.createGain(); g.gain.value = big ? 0.55 : 0.18 + Math.random() * 0.12;
+    src.connect(bp).connect(g).connect(master); src.start(t);
+    const o = ctx.createOscillator(), og = ctx.createGain();                                   // the key bottoming out
+    o.frequency.setValueAtTime(big ? 150 : 230 + Math.random() * 60, t); o.frequency.exponentialRampToValueAtTime(55, t + 0.035);
+    og.gain.setValueAtTime(big ? 0.28 : 0.07, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    o.connect(og).connect(master); o.start(t); o.stop(t + 0.07);
+  }
+
+  /* ---- board ---- */
   const stamp = i => `2026/11/08(土) 02:${String(14 + i * 3).padStart(2, '0')}:${String((i * 17 + 7) % 60).padStart(2, '0')}`;
   function nextPost() {
-    if (!alive || pi >= POSTS.length) return;
+    if (!alive) return;
+    if (pi >= POSTS.length) { setTimeout(dissolve, 2200); return; }
     const [who, text] = POSTS[pi];
     const post = document.createElement('div'); post.className = 'post';
     post.innerHTML = `<div class="meta">No.${String(101 + pi).padStart(4, '0')}　name: <b>${who}</b>　${stamp(pi)}</div><div class="body"></div>`;
@@ -79,27 +119,42 @@
       if (!alive) return;
       ci++;
       body.innerHTML = text.slice(0, ci) + '<span class="caret"></span>';
-      if (ci < text.length) setTimeout(type, 45 + Math.random() * 75);
-      else { body.textContent = text; pi++; setTimeout(nextPost, 900); }
+      if (text[ci - 1] !== ' ') key();
+      if (ci < text.length) setTimeout(type, 55 + Math.random() * 90 + (text[ci - 1] === '.' ? 160 : 0));
+      else { body.textContent = text; key(true); pi++; setTimeout(nextPost, 1000); }
     })();
   }
-  function hide() { alive = false; splash.style.display = 'none'; app.focus(); }
-  function enter() {
-    if (splash.classList.contains('out')) return;
-    splash.classList.add('out');
-    setTimeout(hide, 950);
+
+  function finish() { alive = false; splash.style.display = 'none'; app.focus(); if (ctx) setTimeout(() => ctx.close(), 300); }
+  function fadeHum(sec) { if (ctx && hum) hum.gain.setTargetAtTime(0, ctx.currentTime, sec / 3); }
+  function unmuteSim() { try { app.contentWindow.postMessage({ type: 'hydrosim:set', key: 'muted', value: false }, '*'); } catch (e) {} }
+  function dissolve() {                               // slow fade into the grass field
+    if (splash.classList.contains('dissolve') || splash.classList.contains('out')) return;
+    splash.classList.add('dissolve'); fadeHum(5); unmuteSim();
     try { sessionStorage.setItem('up-splash-seen', '1'); } catch (e) {}
+    setTimeout(finish, 5600);
+  }
+  function skip() {
+    if (splash.classList.contains('out')) return;
+    splash.classList.add('out'); fadeHum(0.8); unmuteSim();
+    try { sessionStorage.setItem('up-splash-seen', '1'); } catch (e) {}
+    setTimeout(finish, 950);
+  }
+  function start() {                                  // the first click both unlocks audio and starts the board
+    if (started) return; started = true;
+    audioInit(); gate.classList.add('gone');
+    flash.classList.add('on');
+    setTimeout(() => { splash.classList.add('board'); nextPost(); }, 2400);
   }
 
   const forced = new URLSearchParams(location.search).has('splash');
   let seen = false;
   try { seen = !!sessionStorage.getItem('up-splash-seen'); } catch (e) {}
-  if (seen && !forced) { hide(); return; }
+  if (seen && !forced) { finish(); return; }
 
-  flash.classList.add('on');
-  setTimeout(() => { splash.classList.add('board'); nextPost(); }, 2400);
-  splash.addEventListener('click', enter);
-  addEventListener('keydown', () => { if (splash.style.display !== 'none') enter(); }, { once: true });
+  splash.addEventListener('click', e => { if (e.target.id === 'enter') return; started ? null : start(); });
+  document.getElementById('enter').addEventListener('click', e => { e.stopPropagation(); started ? skip() : (start(), skip()); });
+  addEventListener('keydown', e => { if (splash.style.display === 'none') return; started ? skip() : start(); });
 })();
 </script>
 </body>
