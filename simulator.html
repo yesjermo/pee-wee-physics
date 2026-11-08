@@ -281,8 +281,8 @@
     <div class="row"><label>Figure</label><select data-key="figure" id="figureSel">
       <option value="male">Nude man (default, censored)</option><option value="female">Female (sitting on the toilet)</option></select></div>
     <div class="row"><label>Skin / costume</label><select data-key="skinStyle">
-      <option value="sculpt">Anatomy sculpt (default)</option><option value="skin">Skin tone</option><option value="cartoon">Cartoon guy</option><option value="clay">Clay sculpt</option><option value="muscle">Muscle anatomy</option>
-      <option value="skeleton">Skeleton</option><option value="gold">Gold statue</option><option value="chrome">Chrome</option>
+      <option value="skeleton">Skeleton (default)</option><option value="sculpt">Anatomy sculpt</option><option value="skin">Skin tone</option><option value="clay">Clay sculpt</option><option value="muscle">Muscle anatomy</option>
+      <option value="gold">Gold statue</option><option value="chrome">Chrome</option>
       <option value="gloop">Gloop costume (purple)</option></select></div>
     <div class="row"><label>Pose (standing figure)</label><select data-key="pose">
       <option value="idle">Relaxed idle</option><option value="sad_pose">Sad slump</option><option value="sneak_pose">Sneaky crouch</option>
@@ -504,7 +504,7 @@ const SCENARIOS = {
 };
 
 const state = {
-  labels: true, figure: 'male', skinStyle: 'sculpt', pose: 'idle', expression: 'auto', studio: false,
+  labels: true, figure: 'male', skinStyle: 'skeleton', pose: 'idle', expression: 'auto', studio: false,
   scenario: 'bathroom', yaw: 0, flip: 0, roll: 0, spin: false, spinAxis: 'yaw', spinSpeed: 0.7, autoAim: false, autoFire: false,
   weight: 0.45, waist: 0.45, belly: 0.3, skin: 1,
   hydration: 0.6, fill: 0.55, aim: -0.42, bodyWater: 1,
@@ -1246,18 +1246,8 @@ const sculptMatcap = (() => {
   g.fillStyle = grd; g.fill();
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 })();
-/* ---- Cartoon guy (original character): cel-shaded skin, ink outlines, big head, mitts and sneakers ---- */
-const toonRamp = (() => {
-  const t = new THREE.DataTexture(new Uint8Array([150, 205, 255]), 3, 1, THREE.RedFormat);
-  t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t;
-})();
-const toon = color => new THREE.MeshToonMaterial({ color, gradientMap: toonRamp });
-const INK = new THREE.MeshBasicMaterial({ color: '#1c1b22', side: THREE.BackSide });
-/** Inverted-hull outline for a primitive: a slightly larger back-face-only black copy. */
-function inked(mesh, k = 1.08) { const o = new THREE.Mesh(mesh.geometry, INK); o.scale.setScalar(k); mesh.add(o); return mesh; }
 
 const SKIN_MATS = {
-  cartoon:  toon('#f2b48c'),
   sculpt:   new THREE.MeshMatcapMaterial({ matcap: sculptMatcap, color: '#e4e4e4' }),
   clay:     new THREE.MeshStandardMaterial({ color: '#b8bbc0', roughness: 0.55, metalness: 0 }),
   muscle:   new THREE.MeshPhysicalMaterial({ map: muscleTex, roughness: 0.38, clearcoat: 0.5, sheen: 0.4, sheenColor: new THREE.Color('#ff9a8a') }),
@@ -1298,92 +1288,6 @@ function makeAnchor(bone, root) {
 /* ---- Skeleton costume: skull, ribcage, pelvis ride on bone anchors; long bones are rebuilt each frame ---- */
 const boneMat = new THREE.MeshStandardMaterial({ color: '#ece3c8', roughness: 0.5 });
 const socketMat = new THREE.MeshBasicMaterial({ color: '#1a1410' });
-let SKIN_INK = null;
-/** Ink outline for the skinned body: a back-face copy bound to the same skeleton, pushed out along the normals. */
-function addSkinnedInk(rig) {
-  rig.inks = [];
-  for (const { mesh } of rig.meshes) {
-    if (!mesh.isSkinnedMesh) continue;
-    if (!SKIN_INK) {
-      // Size the push-out in the geometry's own units (skinned geometry ignores the mesh node's scale)
-      mesh.geometry.computeBoundingBox();
-      const ws = rig.height / Math.max(1e-6, mesh.geometry.boundingBox.max.y - mesh.geometry.boundingBox.min.y);
-      SKIN_INK = new THREE.MeshBasicMaterial({ color: '#1c1b22', side: THREE.BackSide });
-      SKIN_INK.onBeforeCompile = sh => {
-        sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>',
-          `#include <begin_vertex>\n  transformed += normalize(objectNormal) * ${(0.009 / ws).toFixed(5)};`);
-      };
-    }
-    const o = new THREE.SkinnedMesh(mesh.geometry, SKIN_INK);
-    o.position.copy(mesh.position); o.quaternion.copy(mesh.quaternion); o.scale.copy(mesh.scale);
-    o.bind(mesh.skeleton, mesh.bindMatrix); o.frustumCulled = false; o.visible = false;
-    mesh.parent.add(o); rig.inks.push(o);
-  }
-}
-
-function buildCartoon(rig, root) {
-  rig.toon = []; rig.toonFace = { lids: [], brows: [], mouths: {}, blush: [] };
-  const anchor = name => { const b = rig.bones['mixamorig' + name]; return b ? makeAnchor(b.bone, root) : null; };
-  const put = (parent, mesh, x, y, z, ink = 1.08, track = true) => {
-    if (!parent) return mesh;
-    mesh.position.set(x, y, z); mesh.castShadow = true;
-    if (ink) inked(mesh, ink);
-    parent.add(mesh);
-    if (track) { mesh.visible = false; rig.toon.push(mesh); }
-    return mesh;
-  };
-  const skin = SKIN_MATS.cartoon, hairM = toon('#3b2618'), white = toon('#ffffff'), dark = new THREE.MeshBasicMaterial({ color: '#2a1414' });
-  const sphere = (r, w = 28, h = 20) => new THREE.SphereGeometry(r, w, h);
-
-  // Big round head with spiky hair, ears and a button nose
-  const head = anchor('Head'), R = 0.15, hc = new THREE.Vector3(0, 0.115, 0.015);
-  if (head) {
-    put(head, new THREE.Mesh(sphere(R, 40, 30), skin), hc.x, hc.y, hc.z).scale.set(1, 1.04, 0.98);
-    const cap = put(head, new THREE.Mesh(new THREE.SphereGeometry(R * 1.035, 36, 16, 0, Math.PI * 2, 0, Math.PI * 0.42), hairM), hc.x, hc.y + 0.006, hc.z - 0.014);
-    cap.rotation.x = -0.35;
-    for (let i = 0; i < 7; i++) {
-      const a = -1 + i * (2 / 6);
-      const tuft = put(head, new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.14, 10), hairM), Math.sin(a) * 0.105, hc.y + R * 0.98 - Math.abs(a) * 0.03, hc.z - 0.005);
-      tuft.rotation.set(0.35, 0, -a * 0.9);
-    }
-    for (const s of [-1, 1]) put(head, new THREE.Mesh(sphere(0.036, 16, 12), skin), s * R * 0.98, hc.y - 0.006, hc.z - 0.006).scale.set(0.45, 1, 0.75);
-    put(head, new THREE.Mesh(sphere(0.028, 16, 12), skin), 0, hc.y - 0.022, hc.z + R * 0.97).scale.set(1, 0.9, 0.8);
-
-    // Expressive face (eyes with glints, lids, thick brows, mouth shapes, blush): driven by the expression system
-    const face = new THREE.Group(); face.position.copy(hc); face.visible = false; head.add(face); rig.toon.push(face);
-    const F = rig.toonFace;
-    for (const s of [-1, 1]) {
-      put(face, new THREE.Mesh(sphere(0.042), white), s * 0.055, 0.018, 0.122, 1.1, false).scale.set(1, 1.25, 0.55);
-      put(face, new THREE.Mesh(sphere(0.021, 16, 12), new THREE.MeshBasicMaterial({ color: '#111' })), s * 0.052, 0.012, 0.145, 0, false).scale.set(1, 1.2, 0.5);
-      put(face, new THREE.Mesh(sphere(0.0075, 10, 8), new THREE.MeshBasicMaterial({ color: '#fff' })), s * 0.045, 0.026, 0.155, 0, false);
-      const lid = put(face, new THREE.Mesh(new THREE.SphereGeometry(0.046, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), skin), s * 0.055, 0.018, 0.122, 0, false);
-      lid.scale.set(1, 1.25, 0.6); lid.rotation.x = 0.2; F.lids.push(lid);
-      const brow = put(face, new THREE.Mesh(new RoundedBoxGeometry(0.066, 0.017, 0.016, 2, 0.007), hairM), s * 0.058, 0.088, 0.135, 0, false);
-      brow.userData = { side: s, y0: brow.position.y }; F.brows.push(brow);
-      const cheek = put(face, new THREE.Mesh(sphere(0.026, 14, 10), new THREE.MeshBasicMaterial({ color: '#ff7a8f', transparent: true, opacity: 0.5, depthWrite: false })), s * 0.095, -0.028, 0.105, 0, false);
-      cheek.scale.z = 0.35; F.blush.push(cheek);
-    }
-    const smile = put(face, new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.009, 8, 24, Math.PI), dark), 0, -0.052, 0.13, 0, false); smile.rotation.z = Math.PI;
-    const frown = put(face, new THREE.Mesh(new THREE.TorusGeometry(0.034, 0.009, 8, 24, Math.PI), dark), 0, -0.088, 0.128, 0, false);
-    const oMouth = put(face, new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.008, 8, 20), dark), 0, -0.068, 0.137, 0, false);
-    const line = put(face, new THREE.Mesh(new RoundedBoxGeometry(0.052, 0.009, 0.01, 2, 0.004), dark), 0, -0.066, 0.138, 0, false);
-    const grit = put(face, new THREE.Mesh(new RoundedBoxGeometry(0.058, 0.022, 0.012, 2, 0.005), white), 0, -0.066, 0.136, 1.12, false);
-    Object.assign(F.mouths, { smile, frown, o: oMouth, line, grit });
-  }
-  // Chunky mitten hands (bind pose is a T-pose, so hands point along ±X)
-  for (const [bone, s] of [['LeftHand', 1], ['RightHand', -1]]) {
-    const a = anchor(bone);
-    put(a, new THREE.Mesh(sphere(0.058), skin), s * 0.06, -0.004, 0).scale.set(1.15, 0.85, 1);
-    put(a, new THREE.Mesh(sphere(0.024, 14, 10), skin), s * 0.035, 0.004, 0.048);
-  }
-  // Red sneakers with white soles
-  const shoeM = toon('#e94e3c');
-  for (const bone of ['LeftFoot', 'RightFoot']) {
-    const a = anchor(bone);
-    put(a, new THREE.Mesh(new RoundedBoxGeometry(0.125, 0.09, 0.26, 3, 0.04), shoeM), 0, -0.042, 0.06, 1.06);
-    put(a, new THREE.Mesh(new RoundedBoxGeometry(0.13, 0.026, 0.265, 2, 0.011), white), 0, -0.085, 0.06, 1.06);
-  }
-}
 
 /* =====================================================================
    Realistic head: a sculpted head mesh with eyes, lids, brows, nose, ears, hair and live-rebuilt lips,
@@ -1826,9 +1730,7 @@ class HumanFigure {
     this.bellyM.position.set(hip.x, hip.y + 0.07, hip.z + 0.01);
     if (this.rig) {
       const g = this.sitting ? 1 : (wf * (0.92 + 0.14 * wa)) / 1.12 * (state.skinStyle === 'sculpt' ? 0.9 : 1);
-      const toonGuy = state.skinStyle === 'cartoon' && this.rig.key === 'male' && !this.sitting;   // stockier, slightly shorter cartoon build
-      this.rig.wrap.scale.set(g * (toonGuy ? 1.1 : 1), toonGuy ? 0.93 : 1, g * (toonGuy ? 1.1 : 1));
-      for (const o of this.rig.inks || []) o.visible = toonGuy && state.skin > 0.98 && state.view !== 'cross';
+      this.rig.wrap.scale.set(g, 1, g);
       this.rig.wrap.position.y = this.sitting ? SIT.hipY - this.rig.hipY0 : 0;
       if (!state.dissolved) this.mixer.update(dt);
       if (this.sitting) this.poseBones(SIT.bones);
@@ -1916,7 +1818,6 @@ class HumanFigure {
       const anchor = name => { const b = model.getObjectByName(name); return b ? makeAnchor(b, this.root) : null; };
       rig.headA = anchor('mixamorigHead'); rig.chestA = anchor('mixamorigSpine1'); rig.hipA = anchor('mixamorigHips');
       buildSkeletonParts(rig);
-      if (key === 'male') { buildCartoon(rig, this.root); addSkinnedInk(rig); }
       if (key === 'male') { buildProHead(rig, this.skin); buildMuscleField(rig, this.root); }
       this.rigs[key] = rig;
       onDone?.(rig);
@@ -1941,21 +1842,19 @@ class HumanFigure {
   applySkin() {
     const rig = this.rig; if (!rig) return;
     const style = state.skinStyle;
-    const keepOwn = style === 'skin' || (style === 'cartoon' && rig.key !== 'male');   // female keeps her own textures in skin/cartoon looks
+    const keepOwn = style === 'skin';                       // in the skin look the female keeps her own textures
     for (const { mesh, orig } of rig.meshes) {
       let mat = keepOwn ? (rig.key === 'male' ? this.skin : orig) : SKIN_MATS[style];
-      if (rig.muscleU && mesh.isSkinnedMesh && !['cartoon', 'skeleton', 'gloop'].includes(style)) mat = muscleMaterial(rig, mat);
+      if (rig.muscleU && mesh.isSkinnedMesh && !['skeleton', 'gloop'].includes(style)) mat = muscleMaterial(rig, mat);
       mesh.material = mat;
     }
-    for (const p of rig.toon || []) p.visible = style === 'cartoon' && rig.key === 'male';
-    for (const { mesh } of rig.meshes) mesh.receiveShadow = style !== 'cartoon';   // no self-shadow bands on cel shading
     for (const p of rig.skel) p.visible = style === 'skeleton';
     this.bellyM.material = style === 'skin' ? this.skin : SKIN_MATS[style];
     skeletonViz.set(style === 'skeleton' ? rig : null);
-    this.face.visible = !this.sitting && !rig.ownFace && !rig.pro && !!rig.headA && style !== 'skeleton' && !(style === 'cartoon' && rig.toon);
+    this.face.visible = !this.sitting && !rig.ownFace && !rig.pro && !!rig.headA && style !== 'skeleton';
     if (rig.pro) {
-      const P = rig.pro, headMat = (style === 'skin' || style === 'cartoon') ? this.skin : SKIN_MATS[style];
-      P.group.visible = !this.sitting && !['cartoon', 'skeleton', 'gloop'].includes(style);
+      const P = rig.pro, headMat = style === 'skin' ? this.skin : SKIN_MATS[style];
+      P.group.visible = !this.sitting && !['skeleton', 'gloop'].includes(style);
       for (const m of P.skinParts) m.material = headMat;
       P.hair.visible = style !== 'sculpt';
       for (const m of P.features) m.material = style === 'sculpt' ? (m.userData.statue || SKIN_MATS.sculpt) : m.userData.mat0;
@@ -1988,7 +1887,6 @@ class HumanFigure {
   updateFace(dt, t) {
     const sets = [];
     if (this.face.visible) sets.push(this);
-    if (this.rig?.toonFace && this.rig.toon[0]?.visible) sets.push(this.rig.toonFace);
     const P = this.rig?.pro && this.rig.pro.group.visible ? this.rig.pro : null;
     if (!sets.length && !P) return;
     let name = state.expression;
@@ -2021,7 +1919,7 @@ class HumanFigure {
     for (const S of sets) {
       for (const l of S.lids) l.rotation.x += (THREE.MathUtils.lerp(0.2, 1.55, Math.min(1, lid / 1.5)) - l.rotation.x) * f;
       for (const b of S.brows) {
-        const s = b.userData.side, k = S === this ? 1 : 2.2;      // cartoon brows move more
+        const s = b.userData.side, k = 1;
         b.rotation.z += ((-s * (0.12 - ex.brow)) - b.rotation.z) * f;
         b.position.y += ((b.userData.y0 + ex.browY * k) - b.position.y) * f;
       }
@@ -3128,7 +3026,7 @@ function hudFrame(dt) {
   $('hdrTime').textContent = mmss(run);
   $('hdrStatus').textContent = status; $('hdrDot').classList.toggle('on', active);
   $('chipText').textContent = status; $('chipSub').textContent = sub;
-  $('chipFace').textContent = body.expressionName && (body.rig?.pro?.group.visible || body.face.visible || body.rig?.toon?.[0]?.visible) ? ' · FACE: ' + body.expressionName.toUpperCase() : '';
+  $('chipFace').textContent = body.expressionName && (body.rig?.pro?.group.visible || body.face.visible) ? ' · FACE: ' + body.expressionName.toUpperCase() : '';
   $('hudMl').textContent = Math.round(state.fill * CAPACITY_ML);
   $('hudUrge').textContent = urgeText(state.fill);
   drawSpark();
