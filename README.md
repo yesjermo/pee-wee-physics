@@ -98,6 +98,12 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 - A rigged, animated human with a **pixel-mosaic censor** (we're classy here)
 - **Figures:** **skeleton man** (every male version: a ghost-glass body with skull, ribcage, spine, pelvis and limb bones following every animation, kidneys and bladder inside, pixel censor) · female (sitting on the toilet, her own textures) · or load your own `.glb` (it becomes a skeleton too)
 - **Poses:** idle, sad slump, sneaky crouch, nodding, head shake, walk, run
+- **11 skins** for the standing figure: 💀 X-ray skeleton · 🧊 glass (bones inside) · 🪩 liquid chrome · 🏆 gold statue · 🏛️ marble statue · 🏺 terracotta clay · 🎨 cel-shaded toon · 🛰️ hologram (scanlines + rim glow) · ⚡ neon rim glow · 🟢 slime jelly (bones inside) · 🌋 molten lava with glowing cracks. Pick one in **Character → Skin**, or link straight to one with `?skin=chrome`.
+
+### 🎬 Rendering
+- **Render quality** setting: *Fast* (plain), *High* (default: HDR pipeline, 4× MSAA, bloom, lens vignette, film grain and subtle chromatic aberration) or *Ultra* (+ GTAO ambient occlusion). Phones default to *Fast*. Link with `?quality=ultra`.
+- Built entirely from three.js add-ons: `EffectComposer`, `UnrealBloomPass`, `GTAOPass`, `ShaderPass`, `OutputPass`, `RoomEnvironment` image-based lighting, plus a Fresnel rim-glow shader patch for the glowing skins
+- Bloom is tuned per scene (Tokyo neon and the campfire glow the most) and an HDR clamp keeps chrome highlights from turning into a supernova
 - **Female figure** sitting on the toilet (clothed)
 - **Drag to spin.** Left/right turns, up/down flips them head-over-heels. Flick it and they keep spinning. The stream follows. Chaos ensues.
 - **Load your own rigged `.glb`.** Mixamo rigs get the skeleton skin and stream placement for free.
