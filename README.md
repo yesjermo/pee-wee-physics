@@ -66,7 +66,7 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 
 ### 🚽 Physics & physiology
 - **Bladder model:** kidneys fill it based on hydration and diuretics. Pressure drives flow (peaks around a realistic ~24 mL/s) and exit velocity.
-- **Ballistic particle stream** with sub-frame emission, splash droplets, ripples and floor puddles
+- **Ballistic particle stream** with sub-frame emission, splash droplets, ripples and floor puddles that **stay where they land**, grow, take your pee color and slowly dry up
 - **Toilet bowl fills up.** Don't flush and it **overflows**, floods the bathroom, and the flood **dissolves you** into a pee ball. Actions have consequences.
 - **Porcelain stains** take on your current pee color. Flush to clean ~65%, or mop & scrub to clean all of it.
 - **Stream control:** aim angle, power (distance), timed duration, a trajectory preview and predicted range
@@ -103,6 +103,8 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 - **Load your own rigged `.glb`.** Mixamo rigs get the skeleton skin and stream placement for free.
 
 ### 🎯 "Pee as a weapon" (against cartoon objects only, we have standards)
+- 💧 **Drips:** little water-drop mascots with googly eyes who wander the outdoor scenes, **run away from where you're aiming**, fill up yellow when hit and pop into a puddle. Auto-target hunts them too. Click one and it hops.
+- 🖱️ **Click things:** flush the toilet, knock cans and ducks over, squish slimes, relight the campfire, wobble or rebuild the snowman
 - 🟢 **Slime target range:** creeping slimes, purple one-eyed **Gloop** monsters, tin cans, rubber ducks, traffic cones
 - 🔥 **Campfire:** put it out (sizzle + steam)
 - ⛄ **Snowman:** turns yellow, then melts. Yellow snow lingers. As it should.
@@ -111,7 +113,7 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 - 🗽 **New York street:** brick walk-ups with fire escapes, a parked yellow cab, hydrant, trash cans
 - 🏮 **Tokyo neon alley:** neon signs, a glowing vending machine, paper lanterns (crank the power to reach them)
 - 🥐 **Paris boulevard:** Haussmann façades, café table with wine bottles, wicker chairs, a distant iron tower
-- 🎯 **Auto-target mode** aims *and* fires by itself: it judges reach at full pressure, **leads moving targets**, turns the stream power up when nothing is in reach, prefers targets you're already facing, and aims into the bowl in the bathroom
+- 🎯 **Auto-target mode** aims *and* fires by itself: it judges reach at full pressure, **leads moving targets**, turns the stream power up when nothing is in reach, prefers targets you're already facing, and aims into the bowl in the bathroom. Turning it on also stops any spin and stands you back upright, so it works even after you've been twirling.
 - 🎯 **Aim trainer:** a training room with glowing orbs and 60 s rounds. **Move the mouse to aim, hold the button to pee.** Shows a live time / pops / accuracy / avg time-to-kill bar, a landing reticle, and saves your best score.
 - 🎯 **Auto-aim** solves the ballistic equation for you:
   $$\theta = \arctan\left(\frac{v^2 - \sqrt{v^4 - g(gd^2 + 2\,\Delta y\, v^2)}}{g\,d}\right)$$
@@ -142,7 +144,7 @@ Because "why not" stopped being a question somewhere around the procedural toile
 The urine color chart is legit. The pee ball is not.
 
 **Can I pee on people?**
-No. We have slimes, Gloops, rubber ducks, cones, trash cans, a cab, a campfire and a snowman. Have some self-respect.
+No. We have Drips, slimes, Gloops, rubber ducks, cones, trash cans, a cab, a campfire and a snowman. Have some self-respect.
 
 **Does the toilet overflow if I don't flush?**
 Yes. Then the flood dissolves you. Flush your toilet. This is the one real life lesson in here.
@@ -159,6 +161,7 @@ Yes. Drop in any rigged `.glb`. Mixamo rigs get the skeleton skin and stream pla
 - Pee ball has no known cure besides the Respawn button
 - Snowman files a complaint every 9 seconds, then rebuilds and forgives you
 - If you flip the character upside down and release, that's on you
+- Drips are faster than they look. Lead your shots.
 
 ## 🚀 Run it locally
 
@@ -179,6 +182,7 @@ Then open <http://localhost:8765> (splash, then the simulator) or <http://localh
 | `Space` | Release / stop |
 | Drag the person | Spin (←→) & flip (↑↓), flick for inertia |
 | Drag elsewhere | Orbit camera |
+| Click an object | Flush / knock over / squish / relight / poke |
 | Right-drag / scroll | Pan / zoom |
 | `← → ↑ ↓` | Rotate the body |
 | 🚽 Flush / 🧽 Mop & scrub | Your responsibilities |
