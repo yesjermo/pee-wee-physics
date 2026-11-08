@@ -227,6 +227,7 @@ See [GAME_ROADMAP.md](GAME_ROADMAP.md). Highlights: wave survival, drinks-as-amm
 
 ## 🙏 Credits
 
+- 🧡 **[Blender](https://www.blender.org)** by the Blender Foundation and community (GPL). Used for modelling, posing and previewing the characters and props.
 - [three.js](https://threejs.org) (MIT)
 - The **Xbot** and **Michelle** characters are loaded at runtime from the official three.js examples. They're not bundled in this repo, and their licenses are theirs.
 - Pink noise uses Paul Kellet's refined filter
