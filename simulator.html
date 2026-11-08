@@ -597,7 +597,7 @@ const SCENARIOS = {
   paris:    { label: '🥐 Paris boulevard',      bg: '#2b3552', hemi: 0.75, fog: [12, 75] },
   field:    { label: '🌾 Grass field',          bg: '#d5e6ec', hemi: 1.15, fog: [14, 70] },
   aim:      { label: '🎯 Aim trainer',          bg: '#171a21', hemi: 0.85, fog: [10, 40] },
-  y2k:      { label: '📟 Y2K Japanese room',     bg: '#e9c6e6', hemi: 0.7, fog: [14, 40], key: 1.0 },
+  y2k:      { label: "🎀 My sister's room",     bg: '#e9c6e6', hemi: 0.7, fog: [14, 40], key: 1.0 },
   sfalley:  { label: '🌉 SF back alley (fog)',   bg: '#5d6876', hemi: 0.45, fog: [6, 26], key: 0.5 },
   chiunder: { label: '🚇 Chicago underpass',     bg: '#14161b', hemi: 0.3, fog: [8, 34], key: 0.25 },
 };
@@ -1574,6 +1574,134 @@ buildAlley('chiunder', {
   },
 });
 
+/* ---- Bystanders: original low-poly passers-by in the city streets, the park and the grass field. They are ambience, never
+        targets: they walk their routes, and when you start going they stop, react (gasp, cover their eyes or laugh, depending on
+        who's peeing), say something, then walk off away from the splash. Click one and they wave. ---- */
+const BYSTANDER_SCENES = { nyc: 'street', tokyo: 'street', paris: 'street', park: 'wander', field: 'wander' };
+const bystanderGroup = new THREE.Group(); scene.add(bystanderGroup);
+const LINES = {
+  male: ['Ew!', 'Seriously?!', 'Not here!', 'My eyes!', 'Gross...', 'Ugh, again?', 'Sir, this is a sidewalk', 'Nope. Nope.', 'Is that... art?', "I'm calling someone"],
+  beagle: ['Aww, good boy!', "Whose dog is this?", 'At least it is a dog', 'Cute!', 'Hi puppy!'],
+  statue: ['Ha, the fountain!', 'So tiny!', 'Classic Brussels', 'Is it supposed to do that?', 'Wish I had a coin'],
+  wave: ['Hi!', 'Hey there', 'Nice day', 'Oh, hello', '👋'],
+};
+function bubbleTexture() {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 160;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  t.draw = text => {
+    const g2 = c.getContext('2d'); g2.clearRect(0, 0, 512, 160);
+    g2.font = 'bold 44px Inter, sans-serif'; const w = Math.min(490, g2.measureText(text).width + 50);
+    const x = (512 - w) / 2; g2.fillStyle = '#ffffff'; g2.strokeStyle = '#111'; g2.lineWidth = 5;
+    g2.beginPath(); g2.roundRect(x, 10, w, 100, 40); g2.fill(); g2.stroke();
+    g2.beginPath(); g2.moveTo(236, 108); g2.lineTo(256, 148); g2.lineTo(276, 108); g2.fill(); g2.stroke();
+    g2.fillStyle = '#111'; g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText(text, 256, 62);
+    t.needsUpdate = true;
+  };
+  return t;
+}
+function makeBystander(i) {
+  const g = new THREE.Group();
+  const skins = ['#f1c7a5', '#d9a07a', '#a8714a', '#7a4a2e', '#ffd9bd', '#c98d63'];
+  const shirts = ['#e4572e', '#2e86ab', '#f2c14e', '#5c946e', '#8e7dbe', '#f08cae', '#3d3d3d', '#ffffff'];
+  const pants = ['#2b2d42', '#4a4e69', '#6b705c', '#1d3557', '#5e503f'];
+  const hairs = ['#1b1b1b', '#4a2f1d', '#b07a3a', '#d9c27a', '#7a7a7a', '#2e1a10'];
+  const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.75 });
+  const skin = mat(skins[i % skins.length]), shirt = mat(shirts[(i * 3) % shirts.length]), pant = mat(pants[(i * 2) % pants.length]), hair = mat(hairs[(i * 5) % hairs.length]);
+  const h = 0.92 + (i % 4) * 0.04;                                  // a little height variety
+  const legs = [-1, 1].map(s => {
+    const p = new THREE.Group(); p.position.set(s * 0.09, 0.86 * h, 0); g.add(p);
+    const leg = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.065, 0.66 * h, 6, 12), pant)); leg.position.y = -0.4 * h; p.add(leg);
+    const shoe = shadowed(new THREE.Mesh(new RoundedBoxGeometry(0.11, 0.07, 0.22, 2, 0.03), mat('#222'))); shoe.position.set(0, -0.82 * h, 0.04); p.add(shoe);
+    return p;
+  });
+  const torso = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.4 * h, 8, 16), shirt)); torso.position.y = 1.18 * h; torso.scale.set(1, 1, 0.68); g.add(torso);
+  const arms = [-1, 1].map(s => {
+    const p = new THREE.Group(); p.position.set(s * 0.22, 1.42 * h, 0); g.add(p);
+    const arm = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.5 * h, 6, 10), shirt)); arm.position.y = -0.3 * h; p.add(arm);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), skin); hand.position.y = -0.6 * h; p.add(hand);
+    return p;
+  });
+  const head = new THREE.Group(); head.position.y = 1.68 * h; g.add(head);
+  shadowed(head.add(new THREE.Mesh(new THREE.SphereGeometry(0.12, 18, 14), skin)) && head.children[0]);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.125, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), hair); cap.position.y = 0.015; cap.rotation.x = -0.25; head.add(cap);
+  for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), mat('#111')); e.position.set(s * 0.042, 0.015, 0.108); head.add(e); }
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.006, 6, 12, Math.PI), mat('#5a2a22')); mouth.position.set(0, -0.045, 0.108); mouth.rotation.z = Math.PI; head.add(mouth);
+  const gasp = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.006, 6, 12), mat('#5a2a22')); gasp.position.set(0, -0.05, 0.108); gasp.visible = false; head.add(gasp);
+  // One accessory each: shopping bag, coffee cup, backpack or umbrella
+  const kind = i % 4;
+  if (kind === 0) { const bag = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.26, 0.09), mat(['#f2c14e', '#e4572e', '#ffffff'][i % 3]))); bag.position.set(0, -0.72 * h, 0); arms[0].add(bag); }
+  if (kind === 1) { const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.028, 0.1, 12), mat('#ffffff')); cup.position.set(0, -0.66 * h, 0.03); arms[1].add(cup); }
+  if (kind === 2) { const pack = shadowed(new THREE.Mesh(new RoundedBoxGeometry(0.3, 0.38, 0.14, 3, 0.04), mat('#2e86ab'))); pack.position.set(0, 1.2 * h, -0.17); g.add(pack); }
+  if (kind === 3) { const umb = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.8, 6), mat('#222')); umb.position.set(0, -0.35 * h, 0.06); arms[1].add(umb); }
+  const btex = bubbleTexture();
+  const bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: btex, depthTest: false, transparent: true })); bubble.scale.set(0.9, 0.28, 1); bubble.position.y = 2.05 * h; bubble.visible = false; bubble.renderOrder = 10; g.add(bubble);
+  const b = { g, legs, arms, head, mouth, gasp, bubble, btex, h, state: 'walk', t: 0, cool: Math.random() * 3, speed: 0.75 + Math.random() * 0.3, dir: Math.random() < 0.5 ? 1 : -1,
+    goal: new THREE.Vector3(), lane: 0, say: (text, secs = 2.2) => { b.btex.draw(text); b.bubble.visible = true; b.bubbleT = secs; }, bubbleT: 0 };
+  g.userData.interact = () => { b.state = 'wave'; b.t = 0; b.say(LINES.wave[Math.floor(Math.random() * LINES.wave.length)], 1.8); };
+  bystanderGroup.add(g);
+  return b;
+}
+const bystanders = Array.from({ length: 6 }, (_, i) => makeBystander(i));
+let bystanderScene = null;
+function placeBystanders(mode) {
+  bystanders.forEach((b, i) => {
+    b.state = 'walk'; b.t = 0; b.bubble.visible = false; b.cool = 1 + Math.random() * 3;
+    if (mode === 'street') {                                        // two sidewalks: behind you and across the street
+      b.lane = i % 2 ? -2.25 : 5.6; b.dir = i % 3 ? 1 : -1;
+      b.g.position.set(-7 + Math.random() * 14, 0, b.lane + (Math.random() - 0.5) * 0.3);
+    } else {                                                        // park / field: stroll between random points away from you
+      const a = Math.random() * 6.28, r = 3.6 + Math.random() * 2.5; b.g.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); newStrollGoal(b);
+    }
+  });
+}
+function newStrollGoal(b) { const a = Math.random() * 6.28, r = 3.6 + Math.random() * 2.8; b.goal.set(Math.cos(a) * r, 0, Math.sin(a) * r); }
+const _by = new THREE.Vector3();
+function updateBystanders(dt, t) {
+  const mode = BYSTANDER_SCENES[state.scenario];
+  bystanderGroup.visible = !!mode && !trainer.active;
+  if (!mode) { bystanderScene = null; return; }
+  if (bystanderScene !== state.scenario) { bystanderScene = state.scenario; placeBystanders(mode); }
+  const peeing = sim.env > 0.3 && !state.dissolved;
+  const who = state.figure === 'beagle' ? 'beagle' : state.figure === 'statue' ? 'statue' : 'male';
+  body.pivot.getWorldPosition(_by); const fx = _by.x, fz = _by.z;
+  for (const b of bystanders) {
+    const p = b.g.position, dx = p.x - fx, dz = p.z - fz, dist = Math.hypot(dx, dz) || 1;
+    b.t += dt; b.cool -= dt;
+    if (b.bubbleT > 0) { b.bubbleT -= dt; if (b.bubbleT <= 0) b.bubble.visible = false; }
+    // Never let anyone stand in the splash zone
+    const ix = p.x - impactCentroid.x, iz = p.z - impactCentroid.z, id = Math.hypot(ix, iz) || 1;
+    if (peeing && id < 1.3 && b.state !== 'leave') { b.state = 'leave'; b.t = 0; b.say(LINES[who][Math.floor(Math.random() * LINES[who].length)]); }
+    if (b.state === 'walk' && peeing && dist < 9 && b.cool <= 0) { b.state = 'notice'; b.t = 0; b.say('!', 0.7); }
+    let moveX = 0, moveZ = 0, spd = 0, face = null;
+    if (b.state === 'walk') {
+      if (mode === 'street') { moveX = b.dir; spd = b.speed; if (p.x > 8) p.x = -8; if (p.x < -8) p.x = 8; p.z += (b.lane - p.z) * Math.min(1, dt * 2); }
+      else { const gx = b.goal.x - p.x, gz = b.goal.z - p.z, gd = Math.hypot(gx, gz); if (gd < 0.2) newStrollGoal(b); moveX = gx / (gd || 1); moveZ = gz / (gd || 1); spd = b.speed * 0.8; }
+    } else if (b.state === 'notice') {                              // stop and stare
+      face = Math.atan2(-dx, -dz); if (b.t > 0.7) { b.state = 'react'; b.t = 0; b.say(LINES[who][Math.floor(Math.random() * LINES[who].length)], 2.4); }
+    } else if (b.state === 'react') {                               // cover eyes and look away (or smile at the dog / fountain)
+      face = who === 'male' ? Math.atan2(dx, dz) : Math.atan2(-dx, -dz);
+      if (b.t > 1.8) { b.state = who === 'male' ? 'leave' : 'walk'; b.t = 0; b.cool = 6 + Math.random() * 6; }
+    } else if (b.state === 'leave') {                               // walk off, away from you and the splash
+      moveX = dx / dist; moveZ = dz / dist; spd = b.speed * 1.7;
+      if (mode === 'street') { moveZ *= 0.3; moveX = Math.sign(dx || 1); }
+      if (b.t > 3.5 || dist > 9) { b.state = 'walk'; b.t = 0; b.cool = 8 + Math.random() * 6; if (mode === 'street') b.dir = Math.sign(dx || 1); }
+    } else if (b.state === 'wave') { face = Math.atan2(-dx, -dz); if (b.t > 1.8) { b.state = 'walk'; b.t = 0; } }
+    if (spd) { p.x += moveX * spd * dt; p.z += moveZ * spd * dt; face = Math.atan2(moveX, moveZ); }
+    if (face !== null) { let d = face - b.g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); b.g.rotation.y += d * Math.min(1, dt * 8); }
+    // Limbs: walk cycle, or the reaction pose
+    const sw = spd ? Math.sin(b.t * spd * 7) * 0.5 : 0;
+    b.legs[0].rotation.x = sw; b.legs[1].rotation.x = -sw;
+    const covering = b.state === 'react' && who === 'male';
+    const waving = b.state === 'wave';
+    // One hand over the eyes (the other keeps holding the bag), or a wave
+    b.arms[0].rotation.x = covering ? 0.1 : -sw * 0.8; b.arms[0].rotation.z = 0;
+    b.arms[1].rotation.x = covering ? -2.25 : waving ? -0.2 : sw * 0.8; b.arms[1].rotation.z = covering ? -0.42 : waving ? 2.6 + Math.sin(b.t * 14) * 0.35 : 0;
+    b.head.rotation.x = covering ? 0.25 : 0; b.head.rotation.y = b.state === 'notice' ? Math.sin(b.t * 9) * 0.15 : 0;
+    b.gasp.visible = b.state === 'notice' || (covering && b.t < 0.6); b.mouth.visible = !b.gasp.visible;
+    p.y = spd ? Math.abs(Math.sin(b.t * spd * 7)) * 0.02 : 0;
+  }
+}
+
 /* ---- Grass field: instanced wind-swept blades, distant hills, utility poles and wires ---- */
 const grassTime = { value: 0 };
 {
@@ -1646,7 +1774,7 @@ try { trainer.best = +localStorage.getItem('up-aim-best') || 0; } catch (e) { /*
     m.add(orb, ring); m.visible = false; g.add(m);
     const t = addTarget({ scene: 'aim', shape: 'sphere', pos: new THREE.Vector3(), r: 0.09, maxHp: 10, sound: 'ceramic', mesh: m, orb, ring, trainer: true,
       onDestroy() { popOrb(this); } });
-    t.dead = true; t.timer = 0.1 * i; trainer.orbs.push(t);
+    t.dead = true; t.timer = 0.1 * i; t.y0 = 0.6; trainer.orbs.push(t);
   }
 }
 /** Respawn an orb somewhere in a ±65° arc in front of you, within reach of the stream at trainer power. */
@@ -1771,7 +1899,10 @@ function respawnSlime(t) {
 }
 
 function resetTargets() {
-  for (const t of targets) { t.hp = t.maxHp; t.dead = false; t.timer = 0; }
+  for (const t of targets) {
+    if (t.trainer) { t.dead = true; t.timer = 0.1; continue; }   // aim-trainer orbs only come alive through spawnOrb (otherwise their height is NaN)
+    t.hp = t.maxHp; t.dead = false; t.timer = 0;
+  }
   for (const c of knockables) { c.pos.copy(c.home); c.mesh.position.copy(c.home).setY(c.home.y + c.yOff); c.mesh.rotation.set(0, 0, 0); }
   slimes.forEach(respawnSlime);
   snowman.grp.scale.set(1, 1, 1); snowman.grp.visible = true; snowman.snowMat.color.set('#f4f7fb');
@@ -2802,7 +2933,7 @@ class HumanFigure {
 }
 const body = new HumanFigure();
 scene.add(body.pivot);
-window.hydrosim = { alleyKit, get pp() { return pp; }, camera, controls, drips, body, state, sim, THREE, SIT, targets, score, toilet, get trainer() { return trainer; } };   // handy for debugging in the console
+window.hydrosim = { alleyKit, bystanders, get pp() { return pp; }, camera, controls, drips, body, state, sim, THREE, SIT, targets, score, toilet, get trainer() { return trainer; } };   // handy for debugging in the console
 body.rigs = {};
 const FIGURE_URLS = { male: HUMAN_MODEL_URLS, female: FEMALE_MODEL_URLS };
 body.loadRig(state.figure, FIGURE_URLS[state.figure], 0, rig => {
@@ -3585,6 +3716,7 @@ function syncUI() {
   const s = SUBSTANCES[state.substance];
   $('colorNote').textContent = s.note || autoNote();
   $('btnRespawn').style.display = state.dissolved ? '' : 'none';
+  const hs = document.getElementById('hdrSceneSel'); if (hs && hs.options.length && document.activeElement !== hs) hs.value = state.scenario;   // top-bar picker right from the first paint (e.g. ?scene= links)
   renderTrainerCard();
   $('btnLabels').classList.toggle('active', state.labels); $('btnTurntable').classList.toggle('active', state.spin); $('btnStudio').classList.toggle('active', state.studio);
   if (!state.dissolved) $('banner').classList.remove('show');
@@ -3717,7 +3849,7 @@ container.addEventListener('pointerup', e => {
   const r = renderer.domElement.getBoundingClientRect();
   ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
-  const hits = raycaster.intersectObjects([...envGroups[state.scenario].children, ...dripGroup.children], true);
+  const hits = raycaster.intersectObjects([...envGroups[state.scenario].children, ...dripGroup.children, ...(bystanderGroup.visible ? bystanderGroup.children : [])], true);
   const shown = o => { for (; o; o = o.parent) if (!o.visible) return false; return true; };   // raycasts ignore .visible, so check it
   for (const h of hits) { if (!shown(h.object)) continue; let o = h.object; while (o && !o.userData.interact) o = o.parent; if (o) { o.userData.interact(h.point); break; } }
 });
@@ -3877,6 +4009,7 @@ function frame() {
   updateDrips(dt, t);
   y2k.update(dt, t);
   updateAlleys(dt, t);
+  updateBystanders(dt, t);
   updatePreview();
 
   for (const k of IMPACT_TYPES) impacts[k] = 0;
