@@ -1184,7 +1184,8 @@ const y2k = (() => {
     const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.05), pastel('#ffffff')); b.position.set(x, y, 2.98); g.add(b);
   }
   // Posters (original pop graphics)
-  const poster = (draw, x, y, z, ry, w = 0.6, h = 0.8) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: glowTex(draw), roughness: 0.5 })); m.position.set(x, y, z); m.rotation.y = ry; g.add(m); };
+  const posterMeshes = [];
+  const poster = (draw, x, y, z, ry, w = 0.6, h = 0.8) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: glowTex(draw), roughness: 0.5 })); m.position.set(x, y, z); m.rotation.y = ry; m.rotation.order = 'YXZ'; g.add(m); posterMeshes.push(m); };
   poster((c, w, h) => { c.fillStyle = '#7ff4ff'; c.fillRect(0, 0, w, h); c.fillStyle = '#ff4fa8'; c.font = 'bold 74px sans-serif'; c.fillText('2000', 22, 120);
     c.fillStyle = '#fff'; c.font = '20px sans-serif'; c.fillText('★ MILLENNIUM ★', 44, 160); }, 1.1, 1.7, 2.99, Math.PI);
   poster((c, w, h) => { const gr = c.createRadialGradient(128, 96, 10, 128, 96, 120); gr.addColorStop(0, '#fff3a6'); gr.addColorStop(1, '#b07cff'); c.fillStyle = gr; c.fillRect(0, 0, w, h);
@@ -1265,7 +1266,7 @@ const y2k = (() => {
   const chair = new THREE.Group(); const pink = candy('#ff7ac8', { transmission: 0.7, opacity: 0.75 });
   for (const [y, r] of [[0.12, 0.26], [0.3, 0.26]]) { const t = S(new THREE.Mesh(new THREE.TorusGeometry(r, 0.11, 14, 28), pink)); t.rotation.x = Math.PI / 2; t.position.y = y; chair.add(t); }
   const backRest = S(new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.1, 14, 28, Math.PI), pink)); backRest.position.set(0, 0.42, -0.18); chair.add(backRest);
-  addKnockable('y2k', chair, 1.6, 0, 1.6, 0.36, 0.7, 110, 'water');
+  addKnockable('y2k', chair, 1.6, 0, 1.6, 0.36, 0.7, 110, 'water'); chair.userData.homeY = 0;
 
   const plush = new THREE.Group();   // an original round "mochi bunny" plush
   const mochi = S(new THREE.Mesh(new THREE.SphereGeometry(0.13, 20, 16), pastel('#fff5fb'))); mochi.scale.set(1.1, 0.85, 1); mochi.position.y = 0.11; plush.add(mochi);
@@ -1287,7 +1288,7 @@ const y2k = (() => {
   const egg = new THREE.Group();     // an original egg-shaped "virtual pet" keychain toy
   const eggShell = S(new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), candy('#7ff4ff', { transmission: 0.3 }))); eggShell.scale.set(1, 1.15, 0.6); eggShell.position.y = 0.05; egg.add(eggShell);
   const eggScr = new THREE.Mesh(new THREE.PlaneGeometry(0.03, 0.025), new THREE.MeshBasicMaterial({ color: '#c9e6a8' })); eggScr.position.set(0, 0.055, 0.028); egg.add(eggScr);
-  addKnockable('y2k', egg, -1.25, 0.37, 1.75, 0.05, 0.11, 12, 'ceramic', 0.37);
+  addKnockable('y2k', egg, -1.25, 0.37, 1.75, 0.05, 0.11, 12, 'ceramic', 0.37); egg.userData.homeY = 0.37;
 
   const cds = new THREE.Group();     // CD tower
   const cdPole = S(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.7, 8), new THREE.MeshStandardMaterial({ color: '#d8dde5', metalness: 0.9, roughness: 0.2 }))); cdPole.position.y = 0.35; cds.add(cdPole);
@@ -1302,18 +1303,195 @@ const y2k = (() => {
   const pg = S(new THREE.Mesh(new RoundedBoxGeometry(0.07, 0.02, 0.045, 2, 0.006), candy('#b6ff8a'))); pg.position.y = 0.01; pager.add(pg);
   addKnockable('y2k', pager, -2.3, 0.08, 1.6, 0.05, 0.03, 10, 'ceramic', 0.08);
 
+  /* ---- Click to play with the room ---- */
+  const tone = (freq, dur, type = 'square', vol = 0.06, when = 0, slide = 0) => {   // tiny synth voice through the main audio bus
+    if (!audio.started) return;
+    const ctx = audio.ctx, t0 = ctx.currentTime + when, o = ctx.createOscillator(), gn = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t0); if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq * slide), t0 + dur);
+    gn.gain.setValueAtTime(0.0001, t0); gn.gain.exponentialRampToValueAtTime(vol, t0 + 0.01); gn.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(gn); gn.connect(audio.bus); o.start(t0); o.stop(t0 + dur + 0.02);
+  };
+  const noiseHit = (dur, vol = 0.05, when = 0, hp = 6000) => {
+    if (!audio.started) return;
+    const ctx = audio.ctx, t0 = ctx.currentTime + when, n = ctx.createBufferSource(), buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = hp; const gn = ctx.createGain();
+    gn.gain.setValueAtTime(vol, t0); gn.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    n.buffer = buf; n.connect(f); f.connect(gn); gn.connect(audio.bus); n.start(t0);
+  };
+  const liveTex = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.c2 = c.getContext('2d'); t.w = w; t.h = h; return t; };
+
+  // CRT channels: game, static, colour bars, equalizer music show, off
+  const tvLive = liveTex(256, 192);
+  const drawTv = (ch, t) => {
+    const c = tvLive.c2, w = 256, h = 192;
+    if (ch === 1) { const img = c.createImageData(w / 2, h / 2); for (let i = 0; i < img.data.length; i += 4) { const v = Math.random() * 255; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
+      c.putImageData(img, 0, 0); c.drawImage(c.canvas, 0, 0, w / 2, h / 2, 0, 0, w, h); }
+    else if (ch === 2) { ['#c0c0c0', '#c0c000', '#00c0c0', '#00c000', '#c000c0', '#c00000', '#0000c0'].forEach((col, i) => { c.fillStyle = col; c.fillRect(i * w / 7, 0, w / 7 + 1, h * 0.72); });
+      c.fillStyle = '#111'; c.fillRect(0, h * 0.72, w, h); c.fillStyle = '#fff'; c.font = 'bold 18px monospace'; c.fillText('CH 03  ' + new Date().toTimeString().slice(0, 5), 60, h - 20); }
+    else if (ch === 3) { const gr = c.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#2a0f5c'); gr.addColorStop(1, '#ff4fa8'); c.fillStyle = gr; c.fillRect(0, 0, w, h);
+      for (let i = 0; i < 12; i++) { const v = (Math.sin(t * 6 + i * 1.3) * 0.5 + 0.5) * (music.on ? 1 : 0.35) * (0.4 + Math.random() * 0.6); c.fillStyle = ['#7ff4ff', '#fff3a6', '#b6ff8a'][i % 3]; c.fillRect(12 + i * 20, h - 30 - v * 110, 14, v * 110); }
+      c.fillStyle = '#fff'; c.font = 'bold 20px sans-serif'; c.fillText('♪ POP COUNTDOWN 2000', 20, 30); }
+    else if (ch === 4) { c.fillStyle = '#000'; c.fillRect(0, 0, w, h); c.fillStyle = '#fff'; c.beginPath(); c.arc(w / 2, h / 2, 3, 0, 7); c.fill(); }
+    tvLive.needsUpdate = true;
+  };
+  let tvCh = 0, tvTick = 0;
+  const changeChannel = () => {
+    tvCh = (tvCh + 1) % 5; tvScreen.material.map = tvCh === 0 ? gameTex : tvLive; tvScreen.material.needsUpdate = true; drawTv(tvCh, 0);
+    tone(1200, 0.04, 'square', 0.03); noiseHit(0.12, 0.04, 0.02, 3000);
+  };
+
+  // Computer screens: desktop, a new-message pop-up, a starfield screensaver
+  const pcLive = liveTex(256, 192); let pcMode = 0, pcTick = 0;
+  const stars = Array.from({ length: 60 }, () => ({ x: Math.random() * 2 - 1, y: Math.random() * 2 - 1, z: Math.random() }));
+  const drawPc = t => {
+    const c = pcLive.c2, w = 256, h = 192;
+    if (pcMode === 1) {
+      c.drawImage(desktopTex.image, 0, 0, w, h);
+      c.fillStyle = '#fff'; c.strokeStyle = '#ff4fa8'; c.lineWidth = 4; c.fillRect(50, 50, 160, 90); c.strokeRect(50, 50, 160, 90);
+      c.fillStyle = '#ff4fa8'; c.fillRect(50, 50, 160, 18); c.fillStyle = '#fff'; c.font = 'bold 11px monospace'; c.fillText('new message ♥', 58, 63);
+      c.fillStyle = '#333'; c.font = '12px monospace'; c.fillText('from: bestie', 60, 88); c.fillText('photo stickers', 60, 106); c.fillText('at 7pm?? :3', 60, 124);
+    } else if (pcMode === 2) {
+      c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+      for (const s of stars) { s.z -= 0.012; if (s.z <= 0.02) { s.z = 1; s.x = Math.random() * 2 - 1; s.y = Math.random() * 2 - 1; }
+        const px = w / 2 + (s.x / s.z) * 40, py = h / 2 + (s.y / s.z) * 40, r = (1 - s.z) * 3; c.fillStyle = '#fff'; c.fillRect(px, py, r, r); }
+    }
+    pcLive.needsUpdate = true;
+  };
+  const clickPc = () => {
+    pcMode = (pcMode + 1) % 3; pcScreen.material.map = pcMode === 0 ? desktopTex : pcLive; pcScreen.material.needsUpdate = true; drawPc(0);
+    for (let i = 0; i < 6; i++) tone(1800 + Math.random() * 600, 0.025, 'square', 0.02, i * 0.06);   // keyboard clicks
+    if (pcMode === 1) { tone(988, 0.12, 'sine', 0.05, 0.4); tone(1319, 0.2, 'sine', 0.05, 0.55); }  // message chime
+  };
+
+  // Window: night <-> day
+  const dayTex = glowTex((c, w, h) => {
+    const gr = c.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#7ec8ff'); gr.addColorStop(1, '#d9f1ff'); c.fillStyle = gr; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#fff'; for (const [x, y, s] of [[50, 40, 18], [70, 36, 22], [92, 42, 16], [180, 60, 14], [198, 56, 18]]) { c.beginPath(); c.arc(x, y, s, 0, 7); c.fill(); }
+    for (let i = 0; i < 14; i++) { const bw = 12 + (i * 7) % 22, bh = 40 + (i * 37) % 110, x = i * 19; c.fillStyle = ['#c9d6e8', '#b3c3db', '#dfe7f2'][i % 3]; c.fillRect(x, h - bh, bw, bh); }
+  });
+  const sun = new THREE.DirectionalLight('#fff4dc', 0); sun.position.set(-1, 3, 6); g.add(sun);
+  let isDay = false;
+  const toggleWindow = () => { isDay = !isDay; win.material.map = isDay ? dayTex : night; win.material.needsUpdate = true; tone(isDay ? 660 : 440, 0.15, 'triangle', 0.04); };
+
+  // Fairy lights: twinkle -> rainbow chase -> off
+  let fairyMode = 0;
+  const FAIRY_COLS = ['#ff7ac8', '#7ff4ff', '#fff3a6', '#b6ff8a'];
+  const clickFairy = () => { fairyMode = (fairyMode + 1) % 3; tone(fairyMode === 2 ? 300 : 880, 0.06, 'square', 0.03); };
+
+  // Kotatsu heater: orange glow under the quilt, and steam from a mug of tea on top
+  const heat = new THREE.PointLight('#ff7a2a', 0, 1.6, 2); heat.position.set(0, 0.12, 0); kot.add(heat);
+  const mug = S(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.08, 16), pastel('#ffffff'))); mug.position.set(0.18, 0.41, 0.1); kot.add(mug);
+  const tea = new THREE.Mesh(new THREE.CircleGeometry(0.036, 16), new THREE.MeshStandardMaterial({ color: '#8fae4a' })); tea.rotation.x = -Math.PI / 2; tea.position.set(0.18, 0.445, 0.1); kot.add(tea);
+  let kotOn = false;
+  const toggleKotatsu = () => { kotOn = !kotOn; tone(kotOn ? 520 : 260, 0.1, 'sine', 0.04); };
+
+  // Beaded curtain: give it a shove
+  let beadKick = 0;
+  // Phone: rings, buzzes and flashes
+  let ring = 0;
+  const ringPhone = () => { ring = 2.2; for (let i = 0; i < 8; i++) { tone(i % 2 ? 1568 : 1319, 0.09, 'square', 0.035, i * 0.12); } };
+  // Pet egg: feed it, it bounces and shows a heart
+  const eggLive = liveTex(64, 48); let fed = 0;
+  const feedEgg = () => {
+    fed = 2.5; const c = eggLive.c2; c.fillStyle = '#c9e6a8'; c.fillRect(0, 0, 64, 48); c.fillStyle = '#222';
+    for (const [x, y] of [[26, 14], [30, 12], [34, 12], [38, 14], [24, 18], [40, 18], [26, 22], [38, 22], [28, 26], [36, 26], [30, 30], [34, 30], [32, 33]]) c.fillRect(x, y, 4, 4);
+    eggLive.needsUpdate = true; eggScr.material.map = eggLive; eggScr.material.color.set('#ffffff'); eggScr.material.needsUpdate = true;
+    tone(1046, 0.08, 'square', 0.03); tone(1318, 0.08, 'square', 0.03, 0.1); tone(1568, 0.14, 'square', 0.03, 0.2);
+  };
+  // Plush: squeeze (squeak); inflatable chair: bounce (squeak); posters: flutter
+  let squeeze = 0, bounce = 0;
+
+  // Boombox: plays an original chiptune loop, with party lights sweeping the room
+  const boom = new THREE.Group(); boom.position.set(-0.2, 0, 2.62); boom.rotation.y = Math.PI; g.add(boom);
+  const boomBody = S(new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.32, 0.18, 4, 0.05), candy('#9b7bff', { transmission: 0.45 }))); boomBody.position.y = 0.17; boom.add(boomBody);
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.015, 8, 24, Math.PI), new THREE.MeshStandardMaterial({ color: '#d8dde5', metalness: 0.9, roughness: 0.25 })); handle.position.y = 0.33; boom.add(handle);
+  const cones = [-1, 1].map(s => {
+    const ring2 = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.012, 8, 24), new THREE.MeshStandardMaterial({ color: '#d8dde5', metalness: 0.9, roughness: 0.3 })); ring2.position.set(s * 0.18, 0.16, 0.091); boom.add(ring2);
+    const cone = new THREE.Mesh(new THREE.CircleGeometry(0.075, 24), new THREE.MeshStandardMaterial({ color: '#2a1f3d', roughness: 0.6 })); cone.position.set(s * 0.18, 0.16, 0.092); boom.add(cone);
+    return cone;
+  });
+  const deck = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.08), new THREE.MeshBasicMaterial({ color: '#7ff4ff' })); deck.position.set(0, 0.2, 0.092); boom.add(deck);
+  addSolid('y2k', 'box', -0.2, 0.17, 2.62, [0.31, 0.16, 0.09], 'ceramic');
+  const party = ['#ff4fa8', '#4fd6ff', '#b6ff4f'].map((c, i) => { const l = new THREE.SpotLight(c, 0, 9, 0.45, 0.5, 1.2); l.position.set(-1 + i, 2.6, 2.4); l.target.position.set(0, 0, 0); g.add(l, l.target); return l; });
+  const music = { on: false, step: 0, next: 0 };
+  // 16-step pattern, 128 BPM: bass line, arpeggio, hats. Note numbers are MIDI.
+  const BASS = [45, 0, 45, 0, 48, 0, 48, 0, 43, 0, 43, 0, 40, 0, 43, 0];
+  const ARP = [69, 72, 76, 72, 71, 74, 79, 74, 67, 71, 74, 71, 64, 67, 71, 74];
+  const midi = n => 440 * Math.pow(2, (n - 69) / 12);
+  const toggleMusic = () => { music.on = !music.on; music.step = 0; music.next = audio.started ? audio.ctx.currentTime + 0.05 : 0; deck.material.color.set(music.on ? '#b6ff8a' : '#7ff4ff'); tone(music.on ? 880 : 220, 0.08, 'square', 0.04); };
+  const stepMusic = () => {
+    if (!music.on || !audio.started) return;
+    const ctx = audio.ctx, spb = 60 / 128 / 4;
+    while (music.next < ctx.currentTime + 0.12) {
+      const i = music.step % 16, when = music.next - ctx.currentTime;
+      if (BASS[i]) tone(midi(BASS[i]), spb * 1.8, 'triangle', 0.09, when);
+      tone(midi(ARP[i] + (music.step % 64 >= 32 ? 2 : 0)), spb * 0.9, 'square', 0.025, when);
+      if (i % 2 === 0) noiseHit(0.03, 0.03, when, 8000);
+      if (i % 4 === 0) tone(110, 0.12, 'sine', 0.12, when, 0.35);          // kick
+      music.step++; music.next += spb;
+    }
+  };
+
+  const wire = () => {
+    const on = (obj, fn) => { obj.traverse?.(o => { o.userData.interact = fn; }); obj.userData.interact = fn; };
+    on(tv, changeChannel); on(pc, clickPc); on(kb, clickPc);
+    win.userData.interact = toggleWindow;
+    for (const b of fairy) b.userData.interact = clickFairy;
+    on(kot, toggleKotatsu);
+    for (const s of beadStrands) on(s, () => { beadKick = 1.5; for (let i = 0; i < 5; i++) tone(2400 + Math.random() * 1600, 0.05, 'triangle', 0.02, i * 0.03); });
+    on(phone, ringPhone); on(egg, feedEgg);
+    on(plush, () => { squeeze = 0.4; tone(900, 0.18, 'sine', 0.05, 0, 1.6); });
+    on(chair, () => { bounce = 0.6; tone(300, 0.15, 'sine', 0.05, 0, 0.6); });
+    on(boom, toggleMusic);
+    for (const p of posterMeshes) p.userData.interact = () => { p.userData.flutter = 1; noiseHit(0.15, 0.03, 0, 2500); };
+  };
+  const _steam = new THREE.Vector3();
+  const roomFx = (dt, t) => {
+    // live screens
+    if (tvCh === 1 || tvCh === 3) { tvTick -= dt; if (tvTick <= 0) { tvTick = tvCh === 1 ? 0.05 : 0.08; drawTv(tvCh, t); } }
+    if (pcMode === 2) { pcTick -= dt; if (pcTick <= 0) { pcTick = 0.04; drawPc(t); } }
+    // window day light
+    sun.intensity += ((isDay ? 1.6 : 0) - sun.intensity) * Math.min(1, dt * 3);
+    // fairy light modes (and they chase to the beat when the music is on)
+    for (let i = 0; i < fairy.length; i++) {
+      const m = fairy[i].material;
+      if (fairyMode === 2) { m.emissiveIntensity = 0; continue; }
+      if (fairyMode === 1 || music.on) { const k = Math.floor(t * (music.on ? 8.5 : 6)) - i; const c = FAIRY_COLS[((k % 4) + 4) % 4]; m.color.set(c); m.emissive.set(c); m.emissiveIntensity = (k % 4 === 0) ? 3 : 0.8; }
+      else { const c = FAIRY_COLS[i % 4]; m.color.set(c); m.emissive.set(c); m.emissiveIntensity = 1.2 + Math.sin(t * 2.2 + i * 1.7) * 0.9; }
+    }
+    // kotatsu
+    heat.intensity += ((kotOn ? 2.2 : 0) - heat.intensity) * Math.min(1, dt * 3);
+    quilt.material.emissive?.set('#ff6a2a'); if (quilt.material.emissive) quilt.material.emissiveIntensity = heat.intensity * 0.06;
+    if (kotOn && Math.random() < dt * 3) { mug.getWorldPosition(_steam); _steam.y += 0.08; puff(_steam, '#ffffff', 0.08); }
+    // beads, phone, egg, plush, chair, posters
+    if (beadKick > 0) beadKick = Math.max(0, beadKick - dt);
+    for (let k = 0; k < beadStrands.length; k++) beadStrands[k].rotation.x = Math.sin(t * (1.4 + beadKick * 5) + k * 0.6) * (0.04 + beadKick * 0.3);
+    if (ring > 0) { ring -= dt; phone.rotation.z = Math.sin(t * 70) * 0.08; pScr.material.color.set(Math.floor(t * 8) % 2 ? '#ff7ac8' : '#9ff3ff'); }
+    else { phone.rotation.z = 0; pScr.material.color.set('#9ff3ff'); }
+    if (fed > 0) { fed -= dt; egg.position.y = egg.userData.homeY + Math.abs(Math.sin(t * 14)) * 0.03; if (fed <= 0) { eggScr.material.map = null; eggScr.material.color.set('#c9e6a8'); eggScr.material.needsUpdate = true; egg.position.y = egg.userData.homeY; } }
+    if (squeeze > 0) { squeeze -= dt; const k = Math.sin((1 - squeeze / 0.4) * Math.PI); plush.scale.set(1 + k * 0.25, 1 - k * 0.3, 1 + k * 0.25); } else plush.scale.set(1, 1, 1);
+    if (bounce > 0) { bounce -= dt; chair.position.y = chair.userData.homeY + Math.abs(Math.sin((0.6 - bounce) * 10)) * 0.12 * (bounce / 0.6); }
+    for (const p of posterMeshes) { if (p.userData.flutter > 0) { p.userData.flutter -= dt; p.rotation.x = Math.sin(t * 25) * 0.12 * p.userData.flutter; } else p.rotation.x = 0; }
+    // music + party lights + pumping speakers
+    stepMusic();
+    const beat = music.on ? Math.pow(1 - ((t * 128 / 60) % 1), 3) : 0;
+    for (const c of cones) c.scale.setScalar(1 + beat * 0.12);
+    party.forEach((l, i) => { l.intensity += ((music.on ? 6 : 0) - l.intensity) * Math.min(1, dt * 4);
+      l.target.position.set(Math.sin(t * (0.9 + i * 0.3) + i * 2) * 2, 0, Math.cos(t * (0.7 + i * 0.2) + i) * 2 + 0.5); });
+  };
   return {
+    wire,
     update(dt, t) {
-      if (!g.visible) return;
+      if (!g.visible) { if (music.on) toggleMusic(); return; }   // music stops when you leave the room
+      roomFx(dt, t);
       for (let i = 0; i < blobs.length; i++) {                   // lava blobs drift up and down at different speeds
         const b = blobs[i]; b.position.y = 0.16 + (Math.sin(t * (0.35 + i * 0.13) + i * 2) * 0.5 + 0.5) * 0.15;
         b.position.x = Math.sin(t * 0.7 + i) * 0.012; b.scale.y = 1 + Math.sin(t * 1.3 + i) * 0.25;
       }
-      for (let i = 0; i < fairy.length; i++) fairy[i].material.emissiveIntensity = 1.2 + Math.sin(t * 2.2 + i * 1.7) * 0.9;
       pcScreen.material.color.setScalar(0.92 + Math.sin(t * 50) * 0.04);   // subtle CRT flicker
       tvScreen.material.color.setScalar(0.9 + Math.sin(t * 37 + 1) * 0.05);
       gameTex.offset.x = (Math.floor(t * 4) % 4) * 0.002;
-      for (let k = 0; k < beadStrands.length; k++) beadStrands[k].rotation.x = Math.sin(t * 1.4 + k * 0.6) * 0.04;
     },
   };
 })();
@@ -3841,6 +4019,7 @@ function wireInteractions() {
   };
 }
 wireInteractions();
+y2k.wire();                      // my sister's room: TV channels, computer, window, lights, kotatsu, phone, pet egg, boombox...
 let clickStart = null;
 container.addEventListener('pointerdown', e => { clickStart = { x: e.clientX, y: e.clientY, t: performance.now() }; });
 container.addEventListener('pointerup', e => {
