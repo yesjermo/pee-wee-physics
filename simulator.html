@@ -564,7 +564,9 @@ const state = {
 };
 const sim = { env: 0, pressure: 0, flow: 0, pdet: 0, speed: 0, dissolve: 0, diuretic: 0, flowTime: 0,
   mlPerParticle: 0, flushing: 0, spillT: 0, submerged: 0, range: 0, stain: 0, stainMl: 0, yawVel: 0, pitchVel: 0 };
-const stainColor = new THREE.Color('#f0b84a');   // running mix of every pee colour deposited on the porcelain
+const stainColor = new THREE.Color('#f0b84a');
+const bowlColor = new THREE.Color('#f0b84a');    // running mix of the pee colours currently sitting in the bowl water
+const _bowlMix = new THREE.Color(), BOWL_CLEAR = new THREE.Color('#cfeaf5');   // running mix of every pee colour deposited on the porcelain
 const score = { hits: 0, down: 0 };
 
 /* =====================================================================
@@ -2077,7 +2079,10 @@ function onStreamHit(i, s) {
     sim.stainMl = Math.min(800, sim.stainMl + ml);
     sim.stain = Math.min(0.9, sim.stain + ml / 650);
   }
-  if (s.bowl) state.bowl += sim.mlPerParticle;          // each particle carries its share of the flow
+  if (s.bowl) {
+    bowlColor.lerp(urineColor, sim.mlPerParticle / Math.max(sim.mlPerParticle, state.bowl + sim.mlPerParticle));
+    state.bowl += sim.mlPerParticle;          // each particle carries its share of the flow
+  }
   else if (s.flood) state.flood += sim.mlPerParticle;
   stream.life[i] = 0;
 }
@@ -2383,7 +2388,14 @@ function updateBowl(dt) {
   toilet.water.position.y = bowlLevel();
   const s = Math.max(0.5, (0.115 + (toilet.water.position.y - 0.27) * 0.43) / 0.128);
   toilet.water.scale.set(s, 1.2 * s, 1);
-  toilet.waterMat.color.set('#cfeaf5').lerp(urineColor, Math.min(0.9, state.bowl / (state.bowl + 600)));
+  // ~1.5 L of bowl water: even 100 mL of pee tints it visibly, a few hundred mL turns it properly yellow.
+  // The tint uses a saturated version of the pee mix, and reflections fade as it fills so they don't wash the colour out.
+  const tint = Math.min(0.94, state.bowl / (state.bowl + 140));
+  _bowlMix.copy(bowlColor).offsetHSL(0, 0.12, -0.05);
+  toilet.waterMat.color.copy(BOWL_CLEAR).lerp(_bowlMix, tint);
+  toilet.waterMat.opacity = 0.72 + 0.2 * tint;
+  toilet.waterMat.envMapIntensity = 1.6 - 1.1 * tint;
+  toilet.waterMat.clearcoat = 1 - 0.5 * tint;
   // Porcelain takes on the pee colour: stains build up with use, flushing / mopping cleans them
   toilet.ceramicIn.color.set('#eceff3').lerp(stainColor, sim.stain);
   toilet.ceramic.color.set('#f4f6f8').lerp(stainColor, sim.stain * 0.6);
