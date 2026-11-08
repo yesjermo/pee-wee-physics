@@ -598,6 +598,8 @@ const SCENARIOS = {
   field:    { label: '🌾 Grass field',          bg: '#d5e6ec', hemi: 1.15, fog: [14, 70] },
   aim:      { label: '🎯 Aim trainer',          bg: '#171a21', hemi: 0.85, fog: [10, 40] },
   y2k:      { label: '📟 Y2K Japanese room',     bg: '#e9c6e6', hemi: 0.7, fog: [14, 40], key: 1.0 },
+  sfalley:  { label: '🌉 SF back alley (fog)',   bg: '#5d6876', hemi: 0.45, fog: [6, 26], key: 0.5 },
+  chiunder: { label: '🚇 Chicago underpass',     bg: '#14161b', hemi: 0.3, fog: [8, 34], key: 0.25 },
 };
 
 const state = {
@@ -692,6 +694,17 @@ const FLOOR_TEX = {
     for (let y = 0; y < 256; y += 3) { g.fillStyle = y % 6 ? '#a8b06a' : '#c4cb88'; g.fillRect(0, y, 256, 2); }
     g.fillStyle = '#3b4a2c'; g.fillRect(0, 0, 256, 10); g.fillRect(0, 246, 256, 10);
   }, 6),
+  sfalley:  canvasTex(g => {                                     // wet asphalt with cracks and a faded line
+    g.fillStyle = '#2e3033'; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 2600; i++) { g.fillStyle = ['#36383b', '#27292c', '#3d3f42'][i % 3]; g.fillRect(Math.random() * 256, Math.random() * 256, 2, 2); }
+    g.strokeStyle = '#1a1b1d'; g.lineWidth = 2; for (let i = 0; i < 6; i++) { g.beginPath(); let x = Math.random() * 256, y = Math.random() * 256; g.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (Math.random() - 0.5) * 60; y += (Math.random() - 0.5) * 60; g.lineTo(x, y); } g.stroke(); }
+  }, 8),
+  chiunder: canvasTex(g => {                                     // stained concrete slabs with expansion joints
+    g.fillStyle = '#4a4b4d'; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 2200; i++) { g.fillStyle = ['#525355', '#424345', '#5a5b5d'][i % 3]; g.fillRect(Math.random() * 256, Math.random() * 256, 3, 3); }
+    g.fillStyle = 'rgba(20,20,20,0.35)'; for (let i = 0; i < 5; i++) { g.beginPath(); g.ellipse(Math.random() * 256, Math.random() * 256, 30 + Math.random() * 40, 15 + Math.random() * 25, Math.random() * 3, 0, 7); g.fill(); }
+    g.strokeStyle = '#2c2d2f'; g.lineWidth = 3; g.strokeRect(0, 0, 256, 256);
+  }, 8),
 };
 const floorMat = new THREE.MeshStandardMaterial({ map: FLOOR_TEX.bathroom, roughness: 0.4, metalness: 0.05 });
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), floorMat);
@@ -1304,6 +1317,262 @@ const y2k = (() => {
     },
   };
 })();
+
+/* ---- Downtown back alley (San Francisco) and underpass (Chicago): brick walls with original graffiti, dumpsters, trash bags,
+        boxes, bottles, cigarette butts and a smouldering ash can you can put out, flickering sodium lights, a steaming manhole,
+        and rats + cockroaches that scurry around and scatter away from the splash (ambience only, never targets). No people. ---- */
+function graffitiTex(seed) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 256; const g2 = c.getContext('2d');
+  let s = Math.abs(Math.round(seed * 7)) % 233280 + 1;            // any number works as a seed (dumpster x positions are negative)
+  const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280;
+  const cols = ['#ff3d7f', '#2de2e6', '#ffd23f', '#7cff4f', '#b05cff', '#ff8a2a', '#ffffff'];
+  const words = ['ZAP', 'KRO', 'MOX', 'VEX', 'SPLSH', 'GLOW', 'YUZU', 'BRRT', 'NOVA', 'LUX'];
+  for (let k = 0; k < 3; k++) {                                     // bubble-letter tags with outlines and drips
+    const w = words[Math.floor(rnd() * words.length)], x = 20 + rnd() * 300, y = 80 + rnd() * 140, size = 60 + rnd() * 50;
+    g2.save(); g2.translate(x, y); g2.rotate((rnd() - 0.5) * 0.4);
+    g2.font = `900 ${size}px Impact, 'Arial Black', sans-serif`; g2.lineJoin = 'round';
+    g2.lineWidth = 14; g2.strokeStyle = '#111'; g2.strokeText(w, 0, 0);
+    g2.fillStyle = cols[Math.floor(rnd() * cols.length)]; g2.fillText(w, 0, 0);
+    g2.lineWidth = 3; g2.strokeStyle = cols[Math.floor(rnd() * cols.length)]; g2.strokeText(w, 0, 0);
+    g2.fillStyle = g2.strokeStyle;
+    for (let d = 0; d < 6; d++) g2.fillRect(rnd() * size * w.length * 0.5, 4, 3, 10 + rnd() * 30);
+    g2.restore();
+  }
+  for (let k = 0; k < 6; k++) {                                     // throw-ups: stars, arrows, a smiley-ish blob
+    g2.strokeStyle = cols[Math.floor(rnd() * cols.length)]; g2.lineWidth = 5; g2.beginPath();
+    const x = rnd() * 480, y = rnd() * 220; g2.arc(x, y, 8 + rnd() * 20, 0, 6.3); g2.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const brickTex = (base, mortar, grime) => {
+  const t = canvasTex(g2 => {
+    g2.fillStyle = mortar; g2.fillRect(0, 0, 256, 256);
+    for (let row = 0; row < 16; row++) for (let col = -1; col < 5; col++) {
+      const x = col * 64 + (row % 2 ? 32 : 0), y = row * 16;
+      g2.fillStyle = base[Math.floor(Math.random() * base.length)]; g2.fillRect(x + 2, y + 2, 60, 12);
+    }
+    const gr = g2.createLinearGradient(0, 256, 0, 0); gr.addColorStop(0, grime); gr.addColorStop(0.5, 'rgba(0,0,0,0)'); g2.fillStyle = gr; g2.fillRect(0, 0, 256, 256);
+  }, 1);
+  return t;
+};
+const ALLEY_SCENES = ['sfalley', 'chiunder'];
+const alleyKit = [];   // per-scene animated bits, updated by updateAlleys()
+
+function buildAlley(name, opt) {
+  const g = envGroups[name], S = shadowed;
+  // Brick walls: long left wall (x = -2.7) and an end wall (z = +3.6); right and front stay open for the cameras
+  const bt = brickTex(opt.bricks, opt.mortar, 'rgba(10,10,10,0.55)');
+  const bl = bt.clone(); bl.repeat.set(6, 3); bl.needsUpdate = true;
+  const be = bt.clone(); be.repeat.set(5, 3); be.needsUpdate = true;
+  const wallL = S(new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.5, 8), new THREE.MeshStandardMaterial({ map: bl, roughness: 0.95 }))); wallL.position.set(-2.8, 2.25, 0); g.add(wallL);
+  const wallE = S(new THREE.Mesh(new THREE.BoxGeometry(6.5, 4.5, 0.2), new THREE.MeshStandardMaterial({ map: be, roughness: 0.95 }))); wallE.position.set(0.25, 2.25, 3.7); g.add(wallE);
+  addSolid(name, 'box', -2.8, 2.25, 0, [0.1, 2.25, 4], 'ceramic'); addSolid(name, 'box', 0.25, 2.25, 3.7, [3.25, 2.25, 0.1], 'ceramic');
+  // Graffiti decals
+  for (const [x, y, z, ry, w, seed] of [[-2.69, 1.15, -1.2, Math.PI / 2, 2.6, opt.seed], [-2.69, 1.3, 2.1, Math.PI / 2, 2.2, opt.seed + 7], [1.3, 1.25, 3.59, Math.PI, 2.6, opt.seed + 13]]) {
+    const d = new THREE.Mesh(new THREE.PlaneGeometry(w, w / 2), new THREE.MeshStandardMaterial({ map: graffitiTex(seed), transparent: true, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -1 }));
+    d.position.set(x, y, z); d.rotation.y = ry; g.add(d);
+  }
+  // Fire escape zig-zag on the left wall
+  const iron = new THREE.MeshStandardMaterial({ color: '#1d1f22', metalness: 0.7, roughness: 0.6 });
+  for (let f = 0; f < 2; f++) {
+    const y = 2.6 + f * 1.4;
+    const plat = S(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.04, 2.0), iron)); plat.position.set(-2.3, y, 0.6); g.add(plat);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.6, 2.0), iron); rail.position.set(-1.92, y + 0.3, 0.6); g.add(rail);
+    const stair = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 1.9), iron); stair.position.set(-2.3, y - 0.7, 0.6 + (f % 2 ? 0.25 : -0.25)); stair.rotation.x = (f % 2 ? 1 : -1) * 0.62; g.add(stair);
+  }
+  // Dumpsters (solid; the stream splashes off them)
+  for (const [x, z, col] of opt.dumpsters) {
+    const d = new THREE.Group(); d.position.set(x, 0, z); g.add(d);
+    const body = S(new THREE.Mesh(new RoundedBoxGeometry(0.85, 0.95, 1.6, 3, 0.04), new THREE.MeshStandardMaterial({ color: col, roughness: 0.55, metalness: 0.3 }))); body.position.y = 0.55; d.add(body);
+    const lid = S(new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.04, 1.62), new THREE.MeshStandardMaterial({ color: '#202326', roughness: 0.6 }))); lid.position.set(0.04, 1.05, 0); lid.rotation.z = -0.12; d.add(lid);
+    for (const [wx, wz] of [[-0.3, -0.65], [0.3, -0.65], [-0.3, 0.65], [0.3, 0.65]]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 12), iron); w.rotation.x = Math.PI / 2; w.position.set(wx, 0.05, wz); d.add(w); }
+    const tag = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.35), new THREE.MeshStandardMaterial({ map: graffitiTex(opt.seed + x * 10), transparent: true }));
+    tag.position.set(0.43, 0.6, 0); tag.rotation.y = Math.PI / 2; d.add(tag);
+    addSolid(name, 'box', x, 0.55, z, [0.43, 0.5, 0.8], 'ceramic');
+  }
+  // Trash bags, cardboard boxes, bottles: knockable
+  const bagMat = new THREE.MeshPhysicalMaterial({ color: '#0d0e10', roughness: 0.25, clearcoat: 1 });
+  for (const [x, z] of opt.bags) {
+    const b = new THREE.Group(); const blob = S(new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), bagMat)); blob.scale.set(1, 0.85, 1); blob.position.y = 0.19; b.add(blob);
+    const knot = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.1, 8), bagMat); knot.position.y = 0.4; b.add(knot);
+    addKnockable(name, b, x, 0, z, 0.22, 0.42, 60, 'floor');
+  }
+  const cardboard = new THREE.MeshStandardMaterial({ color: '#a77b4a', roughness: 0.9 });
+  for (const [x, z, s] of opt.boxes) {
+    const b = new THREE.Group(); const box = S(new THREE.Mesh(new THREE.BoxGeometry(0.42 * s, 0.32 * s, 0.36 * s), cardboard)); box.position.y = 0.16 * s; box.rotation.y = x; b.add(box);
+    const flap = new THREE.Mesh(new THREE.BoxGeometry(0.42 * s, 0.01, 0.18 * s), cardboard); flap.position.set(0, 0.32 * s, 0.22 * s); flap.rotation.x = -0.7; b.add(flap);
+    addKnockable(name, b, x, 0, z, 0.21 * s, 0.33 * s, 30, 'floor');
+  }
+  for (let i = 0; i < 4; i++) {
+    const b = new THREE.Group(), col = ['#2f6b2a', '#6b3e14', '#2f6b2a', '#bfc7c9'][i];
+    const glass = new THREE.MeshPhysicalMaterial({ color: col, roughness: 0.05, transmission: 0.6, transparent: true, opacity: 0.85, thickness: 0.05 });
+    const body = S(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.2, 14), glass)); body.position.y = 0.1; b.add(body);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.03, 0.09, 12), glass); neck.position.y = 0.245; b.add(neck);
+    addKnockable(name, b, opt.bottlesAt[0] + i * 0.14, 0, opt.bottlesAt[1] + (i % 2) * 0.1, 0.04, 0.29, 10, 'ceramic');
+  }
+  // Cigarette butts scattered on the ground, plus a standing ash can with a smouldering cigarette you can put out
+  const buttMat = new THREE.MeshStandardMaterial({ color: '#f1ede2', roughness: 0.8 }), filterMat = new THREE.MeshStandardMaterial({ color: '#d98a3a', roughness: 0.8 });
+  for (let i = 0; i < 24; i++) {
+    const b = new THREE.Group(), a = Math.random() * 6.28, r = 0.4 + Math.random() * 2.2;
+    const paper = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.025, 6), buttMat); paper.rotation.z = Math.PI / 2; b.add(paper);
+    const filt = new THREE.Mesh(new THREE.CylinderGeometry(0.0042, 0.0042, 0.018, 6), filterMat); filt.rotation.z = Math.PI / 2; filt.position.x = 0.02; b.add(filt);
+    b.position.set(Math.cos(a) * r - 0.4, 0.005, Math.sin(a) * r + 0.8); b.rotation.y = Math.random() * 6.28; g.add(b);
+  }
+  const ash = new THREE.Group(); ash.position.set(...opt.ashAt); g.add(ash);
+  const steel = new THREE.MeshStandardMaterial({ color: '#8d9399', metalness: 0.9, roughness: 0.35 });
+  const can = S(new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.7, 20), steel)); can.position.y = 0.35; ash.add(can);
+  const tray = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.03, 20), new THREE.MeshStandardMaterial({ color: '#4a4d50', roughness: 0.9 })); tray.position.y = 0.71; ash.add(tray);
+  const lit = new THREE.Group(); lit.position.set(0.03, 0.735, 0); lit.rotation.set(0, 0.4, 0.25); ash.add(lit);
+  const paper = new THREE.Mesh(new THREE.CylinderGeometry(0.0045, 0.0045, 0.06, 8), buttMat); paper.rotation.z = Math.PI / 2; lit.add(paper);
+  const ember = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 6), new THREE.MeshStandardMaterial({ color: '#ff5a1a', emissive: '#ff4a12', emissiveIntensity: 4 })); ember.position.x = -0.032; lit.add(ember);
+  const emberLight = new THREE.PointLight('#ff6a2a', 0.4, 1.2, 2); emberLight.position.set(0, 0.76, 0); ash.add(emberLight);
+  const ashTarget = addTarget({ scene: name, shape: 'cyl', pos: new THREE.Vector3(opt.ashAt[0], 0, opt.ashAt[2]), r: 0.14, h: 0.76, maxHp: 120, sound: 'sizzle',
+    onDestroy() { score.down++; this.timer = 9; for (let i = 0; i < 5; i++) puff(_alleyV.set(opt.ashAt[0], 0.8, opt.ashAt[2]), '#9aa3ad', 0.2); } });
+  // Puddles that reflect the lights
+  for (const [x, z, r] of opt.puddles) { const p = new THREE.Mesh(new THREE.CircleGeometry(r, 28), new THREE.MeshPhysicalMaterial({ color: '#3a4250', roughness: 0.04, clearcoat: 1, metalness: 0.6, transparent: true, opacity: 0.55, depthWrite: false })); p.rotation.x = -Math.PI / 2; p.position.set(x, 0.003, z); p.scale.y = 0.6 + Math.random() * 0.4; g.add(p); }
+  // Manhole with steam
+  const man = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.015, 28), new THREE.MeshStandardMaterial({ color: '#2a2b2e', metalness: 0.8, roughness: 0.55 })); man.position.set(...opt.manhole); g.add(man);
+  // Flickering sodium lamps
+  const lamps = opt.lamps.map(([x, y, z]) => {
+    const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.16, 0.12, 16), iron); housing.position.set(x, y, z); g.add(housing);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), new THREE.MeshStandardMaterial({ color: '#ffb35a', emissive: '#ffa040', emissiveIntensity: 3 })); bulb.position.set(x, y - 0.07, z); g.add(bulb);
+    const l = new THREE.PointLight('#ffad5a', 4, 7, 1.6); l.position.set(x, y - 0.15, z); l.castShadow = false; g.add(l);
+    return { bulb, l, base: 4, glitch: 0 };
+  });
+  // A glowing "OPEN 24H" sign over a back door
+  const signTex = (() => { const c = document.createElement('canvas'); c.width = 256; c.height = 96; const s2 = c.getContext('2d');
+    s2.fillStyle = '#111'; s2.fillRect(0, 0, 256, 96); s2.font = 'bold 54px sans-serif'; s2.shadowColor = '#ff2d55'; s2.shadowBlur = 16; s2.fillStyle = '#ff6b8a'; s2.fillText('OPEN 24H', 8, 66);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.34), new THREE.MeshBasicMaterial({ map: signTex })); sign.position.set(-2.68, 2.15, -2.7); sign.rotation.y = Math.PI / 2; g.add(sign);
+  const backDoor = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.0, 0.95), new THREE.MeshStandardMaterial({ color: '#3a4a3c', roughness: 0.7, metalness: 0.3 })); backDoor.position.set(-2.69, 1.0, -2.7); g.add(backDoor);
+
+  // Critters: rats and cockroaches wander near the walls and scatter away from wherever the stream is landing
+  const ratMat = new THREE.MeshStandardMaterial({ color: '#5d544c', roughness: 0.9 }), pinkMat = new THREE.MeshStandardMaterial({ color: '#d99a9a', roughness: 0.7 });
+  const roachMat = new THREE.MeshPhysicalMaterial({ color: '#4a2a12', roughness: 0.35, clearcoat: 1 });
+  const critters = [];
+  const makeRat = () => {
+    const r = new THREE.Group();
+    const body = S(new THREE.Mesh(new THREE.SphereGeometry(0.05, 14, 10), ratMat)); body.scale.set(1.9, 0.9, 1); body.position.y = 0.045; r.add(body);
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.08, 12), ratMat); head.rotation.z = -Math.PI / 2; head.position.set(0.12, 0.05, 0); r.add(head);
+    for (const s of [-1, 1]) { const ear = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), pinkMat); ear.position.set(0.1, 0.08, s * 0.025); r.add(ear);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.005, 6, 4), new THREE.MeshBasicMaterial({ color: '#111' })); eye.position.set(0.125, 0.065, s * 0.02); r.add(eye); }
+    const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.008, 0.16, 6), pinkMat); tail.rotation.z = Math.PI / 2 - 0.2; tail.position.set(-0.17, 0.03, 0); r.add(tail);
+    return { g: r, speed: 0.35, flee: 1.4, hop: 0.012, tail };
+  };
+  const makeRoach = () => {
+    const r = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.014, 10, 8), roachMat); body.scale.set(1.8, 0.5, 1); body.position.y = 0.008; r.add(body);
+    const legMat = new THREE.LineBasicMaterial({ color: '#2a170a' });
+    for (const s of [-1, 1]) for (let k = -1; k <= 1; k++) {
+      const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(k * 0.01, 0.006, s * 0.008), new THREE.Vector3(k * 0.016, 0, s * 0.024)]);
+      r.add(new THREE.Line(geo, legMat));
+    }
+    for (const s of [-1, 1]) { const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0.024, 0.008, s * 0.004), new THREE.Vector3(0.06, 0.016, s * 0.022)]); r.add(new THREE.Line(geo, legMat)); }
+    return { g: r, speed: 0.25, flee: 1.1, hop: 0, tail: null };
+  };
+  for (let i = 0; i < opt.rats + opt.roaches; i++) {
+    const c = i < opt.rats ? makeRat() : makeRoach();
+    c.g.position.set(-2.4 + Math.random() * 0.4, 0, -2.5 + Math.random() * 5.5);
+    c.goal = new THREE.Vector3(); c.wait = Math.random() * 2; c.pickGoal = () => {
+      // rats and roaches hug the walls and hide under the dumpsters
+      const hide = opt.dumpsters[Math.floor(Math.random() * opt.dumpsters.length)];
+      c.goal.set(Math.random() < 0.5 ? -2.55 : hide[0] + (Math.random() - 0.5) * 0.6, 0, Math.random() < 0.5 ? -3 + Math.random() * 6.3 : hide[1] + (Math.random() - 0.5) * 1.2);
+    };
+    c.pickGoal(); g.add(c.g); critters.push(c);
+  }
+  alleyKit.push({ name, lamps, ash: { target: ashTarget, ember, emberLight, lit }, manhole: man, critters, train: opt.train ? opt.train(g) : null });
+}
+const _alleyV = new THREE.Vector3();
+function updateAlleys(dt, t) {
+  for (const k of alleyKit) {
+    if (state.scenario !== k.name) continue;
+    for (const L of k.lamps) {                                      // sodium flicker: mostly steady, sometimes buzzes or cuts out
+      if (L.glitch <= 0 && Math.random() < dt * 0.25) L.glitch = 0.3 + Math.random() * 0.9;
+      let f = 1;
+      if (L.glitch > 0) { L.glitch -= dt; f = Math.random() < 0.5 ? 0.05 : 0.6 + Math.random() * 0.4; }
+      else f = 0.95 + Math.sin(t * 120) * 0.03;
+      L.l.intensity = L.base * f; L.bulb.material.emissiveIntensity = 3 * f;
+    }
+    const a = k.ash, tgt = a.target;                                // smouldering cigarette: glows, smokes; pee puts it out, it relights later
+    if (tgt.dead) { tgt.timer -= dt; if (tgt.timer <= 0) { tgt.dead = false; tgt.hp = tgt.maxHp; } }
+    a.ember.visible = !tgt.dead; a.emberLight.intensity = tgt.dead ? 0 : 0.35 + Math.random() * 0.15;
+    a.ember.material.emissiveIntensity = 3 + Math.sin(t * 5) * 1.2;
+    if (!tgt.dead && Math.random() < dt * 2.5) { a.lit.getWorldPosition(_alleyV); _alleyV.y += 0.04; puff(_alleyV, '#c9ccd2', 0.08); }   // a thin wisp of smoke
+    if (Math.random() < dt * 1.2) puff(_alleyV.copy(k.manhole.position).add(new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.05, (Math.random() - 0.5) * 0.3)), '#d6dbe2', 0.45);
+    for (const c of k.critters) {
+      const p = c.g.position, dx = p.x - impactCentroid.x, dz = p.z - impactCentroid.z, d = Math.hypot(dx, dz) || 1;
+      let tx, tz, sp;
+      if (sim.env > 0.3 && d < 1.1) { tx = p.x + dx / d; tz = p.z + dz / d; sp = c.flee; }    // scatter from the splash
+      else if (c.wait > 0) { c.wait -= dt; continue; }
+      else { tx = c.goal.x; tz = c.goal.z; sp = c.speed; if (Math.hypot(tx - p.x, tz - p.z) < 0.08) { c.wait = 0.5 + Math.random() * 3; c.pickGoal(); } }
+      const ang = Math.atan2(tz - p.z, tx - p.x);
+      p.x += Math.cos(ang) * sp * dt; p.z += Math.sin(ang) * sp * dt;
+      p.x = Math.max(-2.62, Math.min(2.6, p.x)); p.z = Math.max(-3.4, Math.min(3.5, p.z));
+      c.g.rotation.y = -ang;
+      p.y = c.hop ? Math.abs(Math.sin(t * 22 + p.x * 9)) * c.hop : 0;
+      if (c.tail) c.tail.rotation.y = Math.sin(t * 14) * 0.4;
+    }
+    if (k.train) k.train(dt, t);
+  }
+}
+
+// San Francisco: foggy brick alley, hills of houses and a bridge tower in the mist at the end
+buildAlley('sfalley', {
+  bricks: ['#8a4a3a', '#7d4233', '#93533f', '#6f3b2e'], mortar: '#5a5048', seed: 11,
+  dumpsters: [[-2.1, -1.4, '#2f5d3a'], [-2.1, 2.2, '#2c4a6b']], bags: [[-1.5, -0.4], [-1.3, 0.1], [-1.6, 2.9]], boxes: [[-1.2, 1.2, 1], [-1.0, 1.6, 0.8], [0.9, 3.2, 1.1]],
+  bottlesAt: [-0.4, 2.9], ashAt: [1.6, 0, 2.9], puddles: [[0.4, 1.4, 0.5], [-0.6, -1.8, 0.35], [1.2, -0.6, 0.3]], manhole: [0.6, 0.008, 2.3],
+  lamps: [[-2.5, 3.0, -0.4], [-2.5, 3.0, 2.6]], rats: 3, roaches: 9,
+});
+{
+  const g = envGroups.sfalley;
+  const mist = new THREE.MeshBasicMaterial({ color: '#8d9bab', transparent: true, opacity: 0.55, fog: true });
+  for (let i = 0; i < 9; i++) {                                     // stacked bay-window houses climbing a hill, seen past the end wall
+    const h = 2 + Math.random() * 1.5, w = 1.6 + Math.random();
+    const house = new THREE.Mesh(new THREE.BoxGeometry(w, h, 1), mist); house.position.set(-6 + i * 1.6, 3.6 + i * 0.55 + h / 2, 14); g.add(house);
+  }
+  const tower = new THREE.MeshBasicMaterial({ color: '#b5533e', transparent: true, opacity: 0.45 });
+  for (const x of [5.5, 7.3]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.35, 9, 0.35), tower); leg.position.set(x, 6.5, 22); g.add(leg); }
+  for (const y of [5, 8.5, 10.8]) { const beam = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.3, 0.3), tower); beam.position.set(6.4, y, 22); g.add(beam); }
+  const cable = new THREE.Mesh(new THREE.TorusGeometry(9, 0.04, 4, 40, Math.PI * 0.5), tower); cable.position.set(6.4, 19, 22); cable.rotation.z = Math.PI * 1.25; g.add(cable);
+}
+
+// Chicago: lower-level underpass under a concrete deck on riveted green steel columns, with an elevated train rumbling past above
+buildAlley('chiunder', {
+  bricks: ['#6e6a63', '#7a756d', '#5f5b55', '#86817a'], mortar: '#3e3c39', seed: 29,
+  dumpsters: [[-2.1, -0.9, '#3b4b5e'], [-2.1, 2.6, '#4a5a2f']], bags: [[-1.6, 0.2], [-1.4, 1.2], [1.4, 3.1]], boxes: [[-1.3, -2.2, 1], [-1.1, -2.6, 0.8], [0.4, 3.2, 1]],
+  bottlesAt: [0.9, 2.6], ashAt: [1.7, 0, 1.2], puddles: [[0.2, 0.9, 0.6], [1.1, -1.6, 0.4], [-0.8, 2.6, 0.3]], manhole: [-0.6, 0.008, -1.4],
+  lamps: [[-1.2, 3.35, -1.5], [0.6, 3.35, 0.6], [-1.2, 3.35, 2.5]], rats: 4, roaches: 12,
+  train(g) {
+    // Deck overhead with I-beams, green columns, and an elevated train crossing every so often
+    const concrete = new THREE.MeshStandardMaterial({ color: '#4d4f52', roughness: 0.95 });
+    const deck = shadowed(new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.35, 7.6), concrete)); deck.position.set(0, 3.7, 0.1); g.add(deck);
+    const green = new THREE.MeshStandardMaterial({ color: '#2f5b45', roughness: 0.6, metalness: 0.4 });
+    for (let i = 0; i < 6; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.18, 0.12), green); b.position.set(0, 3.43, -3.2 + i * 1.3); g.add(b); }
+    for (const [x, z] of [[1.9, -2.6], [1.9, 0.4], [1.9, 3.0], [-1.0, -2.6], [-1.0, 3.0]]) {
+      const col = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.28, 3.5, 0.28), green)); col.position.set(x, 1.75, z); g.add(col);
+      for (let r = 0; r < 8; r++) { const rivet = new THREE.Mesh(new THREE.SphereGeometry(0.012, 6, 4), green); rivet.position.set(x + 0.145, 0.3 + r * 0.4, z); g.add(rivet); }
+      addSolid('chiunder', 'box', x, 1.75, z, [0.14, 1.75, 0.14], 'ceramic');
+    }
+    const track = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 30), new THREE.MeshStandardMaterial({ color: '#2a2c2e', metalness: 0.6, roughness: 0.6 })); track.position.set(3.4, 4.6, 0); g.add(track);
+    for (let i = 0; i < 6; i++) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.15, 4.6, 0.15), green); post.position.set(3.4, 2.3, -12 + i * 5); g.add(post); }
+    const train = new THREE.Group(); train.position.set(3.4, 4.65, -40); g.add(train);
+    const carMat = new THREE.MeshStandardMaterial({ color: '#b9bec4', metalness: 0.85, roughness: 0.35 }), winMat = new THREE.MeshBasicMaterial({ color: '#fff3c4' });
+    for (let c = 0; c < 4; c++) {
+      const car = new THREE.Mesh(new RoundedBoxGeometry(0.8, 0.9, 4.2, 3, 0.08), carMat); car.position.set(0, 0.5, c * 4.4); train.add(car);
+      for (let w = 0; w < 6; w++) for (const s of [-1, 1]) { const win = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.28), winMat); win.position.set(s * 0.405, 0.65, c * 4.4 - 1.6 + w * 0.64); win.rotation.y = s * Math.PI / 2; train.add(win); }
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.08, 4.2), new THREE.MeshStandardMaterial({ color: '#c8102e' })); stripe.position.set(0, 0.3, c * 4.4); train.add(stripe);
+    }
+    let wait = 4;
+    return (dt, t) => {
+      if (wait > 0) { wait -= dt; return; }
+      train.position.z += dt * 14;
+      const near = Math.max(0, 1 - Math.abs(train.position.z + 6) / 14);   // lights shake and dust falls while it passes
+      deck.position.y = 3.7 + Math.sin(t * 60) * 0.004 * near;
+      if (near > 0.3 && Math.random() < dt * 8) puff(_alleyV.set(-1 + Math.random() * 3, 3.4, -2 + Math.random() * 4), '#8c8f94', 0.25);
+      if (train.position.z > 30) { train.position.z = -40; wait = 8 + Math.random() * 10; }
+    };
+  },
+});
 
 /* ---- Grass field: instanced wind-swept blades, distant hills, utility poles and wires ---- */
 const grassTime = { value: 0 };
@@ -2533,7 +2802,7 @@ class HumanFigure {
 }
 const body = new HumanFigure();
 scene.add(body.pivot);
-window.hydrosim = { get pp() { return pp; }, camera, controls, drips, body, state, sim, THREE, SIT, targets, score, toilet, get trainer() { return trainer; } };   // handy for debugging in the console
+window.hydrosim = { alleyKit, get pp() { return pp; }, camera, controls, drips, body, state, sim, THREE, SIT, targets, score, toilet, get trainer() { return trainer; } };   // handy for debugging in the console
 body.rigs = {};
 const FIGURE_URLS = { male: HUMAN_MODEL_URLS, female: FEMALE_MODEL_URLS };
 body.loadRig(state.figure, FIGURE_URLS[state.figure], 0, rig => {
@@ -3250,7 +3519,7 @@ function applyScenario(name) {
   const s = SCENARIOS[name]; if (!s) return;
   for (const [k, g] of Object.entries(envGroups)) g.visible = k === name;
   floorMat.map = FLOOR_TEX[name]; floorMat.needsUpdate = true;
-  floorMat.roughness = ['field', 'park', 'snow', 'campfire', 'y2k'].includes(name) ? 0.95 : 0.4;   // outdoor ground and tatami are matte
+  floorMat.roughness = ['field', 'park', 'snow', 'campfire', 'y2k'].includes(name) ? 0.95 : ['sfalley', 'chiunder'].includes(name) ? 0.3 : 0.4;   // alleys look wet   // outdoor ground and tatami are matte
   scene.background.set(s.bg); scene.fog.color.set(s.bg);
   scene.fog.near = s.fog ? s.fog[0] : 7; scene.fog.far = s.fog ? s.fog[1] : 16;
   hemi.intensity = s.hemi;
@@ -3516,7 +3785,7 @@ const LensShader = {
       gl_FragColor = c;
     }`,
 };
-const BLOOM_BY_SCENE = { y2k: 0.28, tokyo: 0.6, campfire: 0.55, aim: 0.45, nyc: 0.4, paris: 0.35 };
+const BLOOM_BY_SCENE = { sfalley: 0.4, chiunder: 0.5, y2k: 0.28, tokyo: 0.6, campfire: 0.55, aim: 0.45, nyc: 0.4, paris: 0.35 };
 let composer = null, pp = null, PP = null, ppLoading = null;
 function loadPostFX() {
   ppLoading ??= Promise.all(['EffectComposer', 'RenderPass', 'GTAOPass', 'OutputPass', 'UnrealBloomPass', 'ShaderPass']
@@ -3607,6 +3876,7 @@ function frame() {
   updateTrainer(dt, t);
   updateDrips(dt, t);
   y2k.update(dt, t);
+  updateAlleys(dt, t);
   updatePreview();
 
   for (const k of IMPACT_TYPES) impacts[k] = 0;
