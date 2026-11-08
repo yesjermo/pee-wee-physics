@@ -87,6 +87,7 @@
   .intake button { padding: 6px 2px; font-size: 10.5px; line-height: 1.15; display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .intake button em { font-style: normal; font-size: 18px; }
   .intake button small { color: var(--muted); font-size: 9.5px; }
+  .intake button.refuse { opacity: 0.55; text-decoration: line-through; }
   .intake-log { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; min-height: 22px; }
   .intake-log span { font-size: 10.5px; background: #0d1422; border: 1px solid var(--line); border-radius: 999px; padding: 2px 7px; color: #b9c5d8; }
 
@@ -346,6 +347,10 @@
       <option value="toon">🎨 Cel-shaded toon</option><option value="hologram">🛰️ Hologram wireframe</option>
       <option value="neon">⚡ Neon glow</option><option value="jelly">🟢 Slime jelly</option>
       <option value="lava">🌋 Molten lava</option></select></div>
+    <div class="row"><label>Expression (beagle &amp; statue)</label><select data-key="expression">
+      <option value="auto">Auto (reacts to what's happening)</option><option value="neutral">Neutral</option><option value="happy">Happy</option>
+      <option value="relieved">Relieved</option><option value="surprised">Surprised</option><option value="angry">Angry</option>
+      <option value="strained">Strained (bursting)</option><option value="embarrassed">Embarrassed</option></select></div>
     <div class="row"><label>Pose (standing figure)</label><select data-key="pose">
       <option value="idle">Relaxed idle</option><option value="sad_pose">Sad slump</option><option value="sneak_pose">Sneaky crouch</option>
       <option value="agree">Nodding</option><option value="headShake">Head shake</option><option value="walk">Walk in place</option>
@@ -406,8 +411,9 @@
     <div class="btns"><button class="danger" id="btnRespawn" style="flex:1;display:none">Respawn as human</button></div>
   </section>
   <section>
-    <h2>Food &amp; drink intake</h2>
+    <h2><span id="intakeTitle">Food &amp; drink intake</span></h2>
     <div class="intake" id="intake"></div>
+    <div class="note" id="intakeNote" style="min-height:0;color:#c0392b"></div>
     <div class="intake-log" id="intakeLog"></div>
     <div class="btns" style="margin-top:6px"><button id="btnClearIntake" style="flex:1">Clear intake history</button></div>
   </section>
@@ -542,6 +548,35 @@ const INTAKE = [
   { id: 'fries',   icon: '🍟', label: 'Salty fries',  ml: -150 },
   { id: 'ramen',   icon: '🍜', label: 'Salty ramen',  ml: -60 },
 ];
+/* Each figure has its own menu. `refuse` items are shown but turned down with a reason (dog-toxic foods). */
+const DOG_INTAKE = [
+  { id: 'dogbowl',  icon: '🥣', label: 'Water bowl',       ml: 250 },
+  { id: 'dogbig',   icon: '🪣', label: 'Big water bowl',   ml: 700 },
+  { id: 'kibble',   icon: '🦴', label: 'Dry kibble',       ml: -40 },
+  { id: 'wetfood',  icon: '🥫', label: 'Wet dog food',     ml: 150 },
+  { id: 'chicken',  icon: '🍗', label: 'Chicken & rice',   ml: 60 },
+  { id: 'icecube',  icon: '🧊', label: 'Ice cubes',        ml: 100 },
+  { id: 'carrotd',  icon: '🥕', label: 'Carrot sticks',    ml: 30,  pig: { orange: 1.0 } },
+  { id: 'pumpkin',  icon: '🎃', label: 'Pumpkin',          ml: 40,  pig: { orange: 0.8 } },
+  { id: 'puddle',   icon: '🌧️', label: 'Puddle water',     ml: 120, pig: { brown: 0.3 } },
+  { id: 'loowater', icon: '🚽', label: 'Sneaky toilet sip', ml: 200 },
+  { id: 'choc',     icon: '🍫', label: 'Chocolate',        ml: 0, refuse: 'Chocolate is toxic to dogs. The beagle says no (for once).' },
+  { id: 'grapes',   icon: '🍇', label: 'Grapes',           ml: 0, refuse: 'Grapes can poison dogs. Refused.' },
+];
+const STATUE_INTAKE = [
+  { id: 'mains',    icon: '🚰', label: 'Mains water',      ml: 1000 },
+  { id: 'rain',     icon: '🌧️', label: 'Rain shower',      ml: 500 },
+  { id: 'coin',     icon: '🪙', label: 'Coin (make a wish)', ml: 0 },
+  { id: 'festbeer', icon: '🍺', label: 'Festival beer',    ml: 330, diuretic: 1.0 },
+  { id: 'kriek',    icon: '🍒', label: 'Cherry beer',      ml: 330, diuretic: 0.8, pig: { beet: 0.8 } },
+  { id: 'dyeblue',  icon: '🧪', label: 'Blue dye prank',   ml: 0,   pig: { green: 1.5 } },
+  { id: 'dyeorange',icon: '🟠', label: 'Orange dye (match day)', ml: 0, pig: { orange: 1.6 } },
+  { id: 'algae',    icon: '🦠', label: 'Algae bloom',      ml: 0,   pig: { brown: 1.0 } },
+  { id: 'pigeon',   icon: '🐦', label: 'Pigeon visit',     ml: 0 },
+  { id: 'frozen',   icon: '❄️', label: 'Frozen pipes',     ml: -300 },
+];
+function intakeMenu() { return state.figure === 'beagle' ? DOG_INTAKE : state.figure === 'statue' ? STATUE_INTAKE : INTAKE; }
+const ALL_INTAKE = [...INTAKE, ...DOG_INTAKE, ...STATUE_INTAKE];
 const pigments = Object.fromEntries(Object.keys(PIGMENTS).map(k => [k, 0]));
 const intakeLog = {};
 const BOWL_CAP_ML = 1200;       // toilet bowl volume before it overflows
@@ -1530,6 +1565,23 @@ const EXPRESSIONS = {
   embarrassed: { lid: 0.55, brow: -0.25, browY: 0.006,  mouth: 'line', blush: true },
 };
 /* Sitting on the toilet: hip height and Mixamo bone offsets (local Euler, radians) on top of the bind pose */
+/** The mood every face shows: picked by hand, or (auto) from what's happening: relieved while going, strained when bursting, etc. */
+function currentExpression() {
+  if (state.expression !== 'auto') return state.expression;
+  return state.dissolved || sim.submerged > 0 || state.bodyWater < 0.3 ? 'surprised'
+    : sim.env > 0.3 ? (state.overdrive ? 'happy' : 'relieved')
+    : state.fill > 0.92 ? 'strained' : state.fill > 0.75 ? 'embarrassed' : state.hydration > 0.75 ? 'happy' : 'neutral';
+}
+/** Dog body language per mood: ear spread (bigger = ears lifted out, small = droopy) / ears swept back (negative), eyelids (negative = wide eyes), brow lift, tongue, tail wag speed and height, head tilt and nod. */
+const DOG_FACES = {
+  neutral:     { ear: 0.12, back: 0,    lid: 0.15,  brow: 0,     tongue: 0, wag: 9,  amp: 0.45, tail: 0.2,  tilt: 0,    nod: 0 },
+  happy:       { ear: 0.2, back: 0.1,  lid: 0.05,  brow: 0.15,  tongue: 1, wag: 20, amp: 0.6,  tail: 0.35, tilt: 0.14, nod: 0.08 },
+  relieved:    { ear: 0.06, back: 0.05, lid: 0.85,  brow: -0.1,  tongue: 1, wag: 7,  amp: 0.3,  tail: 0.25, tilt: 0.1,  nod: 0.12 },
+  surprised:   { ear: 0.42, back: 0.15, lid: -0.3,  brow: 0.45,  tongue: 0, wag: 0,  amp: 0,    tail: 0.45, tilt: 0,    nod: 0.15 },
+  angry:       { ear: 0.1,  back: -0.55, lid: 0.45,  brow: -0.45, tongue: 0, wag: 0,  amp: 0,    tail: 0.5,  tilt: 0,    nod: -0.12 },
+  strained:    { ear: 0.08, back: -0.4, lid: 0.7,   brow: 0.3,   tongue: 0, wag: 3,  amp: 0.12, tail: 0.1,  tilt: 0.05, nod: -0.05 },
+  embarrassed: { ear: 0.03,  back: -0.35, lid: 0.45,  brow: 0.35,  tongue: 0, wag: 2,  amp: 0.12, tail: -0.5, tilt: 0.18, nod: -0.2 },
+};
 const SIT = {
   hipY: 0.52,
   bones: {
@@ -1645,9 +1697,14 @@ function buildBeagle(root) {
   const blaze = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.012, 0.06, 4, 8), white), 0.045, 0.035, 0, head); blaze.rotation.z = 1.1;
   add(capsuleX(0.042, 0.06, white), 0.085, -0.025, 0, head);                                            // muzzle
   add(new THREE.Mesh(new THREE.SphereGeometry(0.022, 14, 10), dark), 0.145, -0.012, 0, head).scale.set(0.9, 0.8, 1.1);   // nose
+  const lids = [], brows = [];
   for (const s of [-1, 1]) {
     add(new THREE.Mesh(new THREE.SphereGeometry(0.014, 12, 10), dark), 0.06, 0.022, s * 0.042, head);
     add(new THREE.Mesh(new THREE.SphereGeometry(0.004, 8, 6), new THREE.MeshBasicMaterial({ color: '#fff' })), 0.07, 0.028, s * 0.048, head);
+    const lid = add(new THREE.Mesh(new THREE.SphereGeometry(0.0165, 12, 10), tan), 0.061, 0.044, s * 0.042, head); lid.scale.set(1, 0.6, 1);
+    lids.push(lid);
+    const brow = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.004, 0.016, 4, 8), new THREE.MeshStandardMaterial({ color: '#7a4a1c', roughness: 0.8 })), 0.058, 0.043, s * 0.042, head);
+    brow.rotation.x = Math.PI / 2; brow.userData.side = s; brows.push(brow);
   }
   const tongue = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.012, 0.03, 4, 8), new THREE.MeshStandardMaterial({ color: '#e0646e', roughness: 0.4 })), 0.1, -0.06, 0, head);
   tongue.rotation.z = 0.3; tongue.visible = false;
@@ -1672,20 +1729,29 @@ function buildBeagle(root) {
 
   const raised = legs.find(l => l.hind && l.z > 0);          // the hind leg on the +Z side (toward the target)
   const exit = add(new THREE.Object3D(), -0.13, 0.26, 0.07);   // under the raised leg
-  let lift = 0;
+  let lift = 0, blink = 2;
+  const cur = { ...DOG_FACES.neutral };
   const tick = (dt, t) => {
     const peeing = sim.env > 0.05 || state.flowing;
+    // Ease every face channel toward the current mood, so expressions blend instead of snapping
+    const target = DOG_FACES[currentExpression()] || DOG_FACES.neutral, f = Math.min(1, dt * 6);
+    for (const k in cur) cur[k] += (target[k] - cur[k]) * f;
+    blink -= dt; if (blink < -0.12) blink = 2 + Math.random() * 3;
+    const lid = blink < 0 ? 1 : cur.lid;
+    for (const l of lids) l.position.y = 0.022 + 0.022 * (1 - Math.max(-0.3, Math.min(1, lid)));
+    for (const b of brows) { b.position.y = 0.043 + cur.brow * 0.008; b.rotation.y = b.userData.side * cur.brow * 0.6; }
     lift += ((peeing ? 1 : 0) - lift) * Math.min(1, dt * 5);
     raised.pivot.rotation.x = -lift * 1.25;                   // swing the hind leg outward (+Z) and up
     raised.pivot.rotation.z = -lift * 0.35;
     dog.rotation.x = -lift * 0.12;                            // lean away from the raised leg
     dog.position.y = lift * 0.015;
-    tail.rotation.x = Math.sin(t * (peeing ? 18 : 9)) * 0.45;
-    tail.rotation.z = 0.2 + lift * 0.3;
-    for (const e of ears) e.rotation.x = e.userData.side * (0.12 + Math.sin(t * 2.4 + e.userData.side) * 0.06);
-    head.rotation.z = Math.sin(t * 0.8) * 0.06 + (peeing ? 0.1 : 0);
-    head.rotation.x = Math.sin(t * 0.5) * 0.05;
-    tongue.visible = peeing || state.fill > 0.85;
+    tail.rotation.x = Math.sin(t * cur.wag) * cur.amp;
+    tail.rotation.z = cur.tail + lift * 0.3;
+    for (const e of ears) { e.rotation.x = e.userData.side * (cur.ear + Math.sin(t * 2.4 + e.userData.side) * 0.05); e.rotation.z = cur.back; }
+    head.rotation.z = Math.sin(t * 0.8) * 0.04 + cur.nod;
+    head.rotation.x = Math.sin(t * 0.5) * 0.04 + cur.tilt;
+    tongue.visible = cur.tongue > 0.5;
+    tongue.position.y = -0.06 - (cur.tongue > 0.5 ? Math.abs(Math.sin(t * 9)) * 0.006 : 0);   // panting
     const breathe = 1 + Math.sin(t * (state.fill > 0.85 ? 9 : 3)) * 0.015;
     saddle.scale.y = 0.85 * breathe;
   };
@@ -1745,6 +1811,7 @@ function buildStatue(root) {
     add(new THREE.Mesh(new THREE.SphereGeometry(0.009, 8, 6), bronze), -s * 0.016, -0.158, 0.012, arm);            // thumb
     return arm;
   });
+  const sLids = [], sBrows = [];
   // Head: big and round (about a quarter of the height), full cheeks, small chin, button nose, ears, faint brows, closed-lip smile
   add(S(new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.04, 0.03, 16), bronze)), 0, 0.425, 0, fig);           // neck
   const head = add(new THREE.Group(), 0, 0.52, 0.005, fig);
@@ -1754,13 +1821,22 @@ function buildStatue(root) {
     add(new THREE.Mesh(new THREE.SphereGeometry(0.027, 16, 12), bronze), s * 0.04, -0.028, 0.048, head).scale.set(1, 0.9, 0.85);   // soft full cheeks
     add(S(new THREE.Mesh(new THREE.SphereGeometry(0.018, 12, 10), bronze)), s * 0.083, -0.005, -0.004, head).scale.set(0.45, 1, 0.8);   // ears
     add(new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 10), bronzeDark), s * 0.029, 0.008, 0.079, head).scale.set(1.25, 0.8, 0.5);   // eyes
+    const lid = add(new THREE.Mesh(new THREE.SphereGeometry(0.0145, 12, 10), bronze), s * 0.029, 0.024, 0.078, head); lid.scale.set(1.3, 0.7, 0.62);
+    sLids.push(lid);
     add(new THREE.Mesh(new THREE.SphereGeometry(0.0035, 8, 6), bronze), s * 0.026, 0.012, 0.085, head);                                 // catch-light
     const brow = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.0035, 0.018, 4, 8), bronzeDark), s * 0.029, 0.03, 0.08, head);
-    brow.rotation.z = Math.PI / 2 + s * 0.15;
+    brow.rotation.z = Math.PI / 2 + s * 0.15; brow.userData.side = s; sBrows.push(brow);
   }
   add(new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 10), bronze), 0, -0.012, 0.087, head).scale.set(1.2, 0.9, 1);   // button nose
-  const smile = add(new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.003, 6, 16, Math.PI), bronzeDark), 0, -0.038, 0.078, head);
-  smile.rotation.z = Math.PI;
+  // Mouth shapes, one shown at a time: smile, frown, 'o', flat line, clenched grit
+  const mouths = {
+    smile: add(new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.003, 6, 16, Math.PI), bronzeDark), 0, -0.038, 0.078, head),
+    frown: add(new THREE.Mesh(new THREE.TorusGeometry(0.012, 0.003, 6, 16, Math.PI), bronzeDark), 0, -0.05, 0.077, head),
+    o:     add(new THREE.Mesh(new THREE.TorusGeometry(0.008, 0.003, 6, 16), bronzeDark), 0, -0.042, 0.078, head),
+    line:  add(new THREE.Mesh(new THREE.CapsuleGeometry(0.0028, 0.018, 4, 8), bronzeDark), 0, -0.042, 0.078, head),
+    grit:  add(new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.008, 0.004), bronzeDark), 0, -0.042, 0.079, head),
+  };
+  mouths.smile.rotation.z = Math.PI; mouths.line.rotation.z = Math.PI / 2;
   add(new THREE.Mesh(new THREE.SphereGeometry(0.014, 10, 8), bronze), 0, -0.062, 0.062, head);                   // chin
   for (let i = 0; i < 5; i++) {                                                                                    // a few soft curls on top
     const c = add(new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), bronze), (i - 2) * 0.018, 0.085 - Math.abs(i - 2) * 0.006, 0.02, head);
@@ -1773,8 +1849,19 @@ function buildStatue(root) {
   }
 
   const exit = add(new THREE.Object3D(), 0, 0.215, 0.105, fig);   // fountain spout just under the front of the smock hem
+  let sBlink = 3;
   const tick = (dt, t) => {
     pool.material.color.copy(_poolTint.set('#9fd3e6').lerp(urineColor, Math.min(0.6, sim.stainMl / 600)));
+    // Bronze face follows the same moods as everyone else (eyelids, brows, mouth shape)
+    const ex = EXPRESSIONS[currentExpression()] || EXPRESSIONS.neutral, f = Math.min(1, dt * 8);
+    sBlink -= dt; if (sBlink < -0.13) sBlink = 3 + Math.random() * 4;
+    const lidY = 0.024 - 0.016 * Math.min(1, (sBlink < 0 ? 1.5 : ex.lid) / 1.5);
+    for (const l of sLids) l.position.y += (lidY - l.position.y) * f;
+    for (const b of sBrows) {
+      b.rotation.z += ((Math.PI / 2 + b.userData.side * (0.15 - ex.brow)) - b.rotation.z) * f;
+      b.position.y += ((0.03 + ex.browY * 0.8) - b.position.y) * f;
+    }
+    for (const [k, m] of Object.entries(mouths)) m.visible = k === ex.mouth;
     head.rotation.z = Math.sin(t * 0.7) * 0.025;                 // the faintest bronze 'wobble' so it doesn't look frozen
     for (const a of arms) a.rotation.x = Math.sin(t * 0.9) * 0.02;
   };
@@ -2089,12 +2176,7 @@ class HumanFigure {
     const sets = [];
     if (this.face.visible) sets.push(this);
     if (!sets.length) return;
-    let name = state.expression;
-    if (name === 'auto') {
-      name = state.dissolved || sim.submerged > 0 || state.bodyWater < 0.3 ? 'surprised'
-        : sim.env > 0.3 ? (state.overdrive ? 'happy' : 'relieved')
-        : state.fill > 0.92 ? 'strained' : state.fill > 0.75 ? 'embarrassed' : state.hydration > 0.75 ? 'happy' : 'neutral';
-    }
+    const name = currentExpression();
     const ex = EXPRESSIONS[name] || EXPRESSIONS.neutral;
     this._blink = (this._blink ?? 3) - dt;
     if (this._blink < -0.13) this._blink = 2.5 + Math.random() * 3;
@@ -2542,6 +2624,7 @@ function targetColor(out) {
 
 function consume(item) {
   if (!item) return;
+  if (item.refuse) { const n = document.getElementById('intakeNote'); n.textContent = '🚫 ' + item.refuse; clearTimeout(n._t); n._t = setTimeout(() => { n.textContent = ''; }, 4000); return; }
   state.hydration = THREE.MathUtils.clamp(state.hydration + item.ml / 2200, 0, 1);
   if (item.ml > 0) state.bodyWater = Math.min(1, state.bodyWater + item.ml / 4000);
   sim.diuretic += item.diuretic || 0;
@@ -2558,7 +2641,7 @@ function renderIntakeLog() {
   const el = document.getElementById('intakeLog'); el.innerHTML = '';
   const ids = Object.keys(intakeLog);
   if (!ids.length) { el.innerHTML = '<span>Nothing eaten yet</span>'; return; }
-  for (const id of ids) { const it = INTAKE.find(i => i.id === id); const s = document.createElement('span'); s.textContent = `${it.icon} ${it.label} ×${intakeLog[id]}`; el.appendChild(s); }
+  for (const id of ids) { const it = ALL_INTAKE.find(i => i.id === id); const s = document.createElement('span'); s.textContent = `${it.icon} ${it.label} ×${intakeLog[id]}`; el.appendChild(s); }
 }
 
 /* ---- Toilet bowl level, overflow and the flood ---- */
@@ -2811,6 +2894,7 @@ function applyFigure(key) {
     } else if (Math.abs(state.yaw) > 3) state.yaw = 0;
     $('modelNote').textContent = '';
     goView(state.view);                                         // re-frame the camera for the new figure's size
+    renderIntakeMenu();
     syncUI();
   };
   if (body.rigs[key]) return go();
@@ -2909,17 +2993,26 @@ document.querySelectorAll('[data-key]').forEach(el => {
     setValue(el.dataset.key, el.type === 'checkbox' ? el.checked : el.value));
 });
 $('btnFlow').onclick = () => setValue('flowing', !state.flowing);
-$('btnDrink').onclick = () => consume(INTAKE[0]);
+$('btnDrink').onclick = () => consume(intakeMenu()[0]);
 $('btnFlush').onclick = () => { sim.flushing = 1.6; sim.stain *= 0.35; audio.flush(); };
 $('btnMop').onclick = () => { state.flood = 0; clearPuddles(); sim.stain = 0; sim.stainMl = 0; };
 $('btnClearIntake').onclick = clearIntake;
-for (const it of INTAKE) {
-  const b = document.createElement('button');
-  b.innerHTML = `<em>${it.icon}</em>${it.label}<small>${it.ml > 0 ? '+' + it.ml + ' mL' : it.ml < 0 ? 'dehydrating' : 'pigment'}</small>`;
-  b.title = it.pig ? Object.keys(it.pig).map(k => PIGMENTS[k].note).join(' ') : `${it.ml} mL of fluid`;
-  b.onclick = () => consume(it);
-  $('intake').appendChild(b);
+/** Rebuild the food & drink buttons for whoever is on screen: human, beagle or fountain statue. */
+function renderIntakeMenu() {
+  const titles = { beagle: '🐶 Dog food &amp; water', statue: '⛲ Fountain supply' };
+  $('intakeTitle').innerHTML = titles[state.figure] || 'Food &amp; drink intake';
+  $('intake').innerHTML = '';
+  for (const it of intakeMenu()) {
+    const b = document.createElement('button');
+    const tag = it.refuse ? 'not for dogs' : it.ml > 0 ? '+' + it.ml + ' mL' : it.ml < 0 ? 'dehydrating' : it.pig ? 'pigment' : 'just for fun';
+    b.innerHTML = `<em>${it.icon}</em>${it.label}<small>${tag}</small>`;
+    if (it.refuse) b.classList.add('refuse');
+    b.title = it.refuse || (it.pig ? Object.keys(it.pig).map(k => PIGMENTS[k].note).join(' ') : `${it.ml} mL of fluid`);
+    b.onclick = () => consume(it);
+    $('intake').appendChild(b);
+  }
 }
+renderIntakeMenu();
 renderIntakeLog();
 $('btnMute').onclick = () => setValue('muted', !state.muted);
 $('btnRespawn').onclick = $('btnRespawn2').onclick = respawn;
@@ -3037,7 +3130,7 @@ window.addEventListener('message', e => {
   if (m.type === 'hydrosim:flush') $('btnFlush').onclick();
   if (m.type === 'hydrosim:respawn') respawn();
   if (m.type === 'hydrosim:resetTargets') resetTargets();
-  if (m.type === 'hydrosim:consume') consume(INTAKE.find(i => i.id === m.id));
+  if (m.type === 'hydrosim:consume') consume(ALL_INTAKE.find(i => i.id === m.id));
   if (m.type === 'hydrosim:mop') $('btnMop').onclick();
 });
 

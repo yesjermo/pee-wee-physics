@@ -12,7 +12,9 @@
 [![Play it now](https://img.shields.io/badge/▶_PLAY-splash_→_simulator-f5c14b?style=for-the-badge)](https://yesjermo.github.io/pee-wee-physics/?splash)
 [![Simulator](https://img.shields.io/badge/skip_the_intro-straight_to_the_toilet-4fd6e8?style=for-the-badge)](https://yesjermo.github.io/pee-wee-physics/simulator.html)
 
+![Blender](https://img.shields.io/badge/Blender-modelling-F5792A?logo=blender&logoColor=white)
 ![Three.js](https://img.shields.io/badge/three.js-r160-000000?logo=threedotjs&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-ES_modules-F7DF1E?logo=javascript&logoColor=black)
 ![Web Audio API](https://img.shields.io/badge/Web_Audio-100%25_synthesized-4fd6e8)
 ![WebGL](https://img.shields.io/badge/WebGL-2.0-990000?logo=webgl&logoColor=white)
 ![Build](https://img.shields.io/badge/build_step-none,_just_vibes-success)
@@ -98,6 +100,8 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 - A rigged, animated human with a **pixel-mosaic censor** (we're classy here)
 - **Figures:** **skeleton man** (every male version: a ghost-glass body with skull, ribcage, spine, pelvis and limb bones following every animation, kidneys and bladder inside, pixel censor) · female (sitting on the toilet, her own textures) · or load your own `.glb` (it becomes a skeleton too)
 - **Poses:** idle, sad slump, sneaky crouch, nodding, head shake, walk, run
+- **Expressions** for the beagle and the fountain statue: auto (reacts to what's happening), neutral, happy, relieved, surprised, angry, strained, embarrassed. The beagle uses ears, eyelids, brows, tongue and tail; the bronze statue uses eyelids, brows and five mouth shapes.
+- **Each figure eats different things:** humans get the drinks-and-pigments menu, the beagle gets dog food and water bowls (and refuses chocolate and grapes, which are toxic to dogs), and the fountain gets mains water, rain, festival beer, coin wishes and dye pranks.
 - 🐶 **Beagle:** tricolour coat, floppy ears, wagging white-tipped tail. **Lifts a hind leg** when it goes, tongue out when it's desperate. The camera presets shrink to dog height.
 - ⛲ **Brussels fountain statue:** a chubby bronze toddler (big round head, full cheeks, short dimpled arms and legs) on a stone pedestal over a fountain basin, always dressed in a red smock with gold trim. The water leaves a fountain spout, and the basin slowly takes on the colour.
 - **11 skins** for the standing figure: 💀 X-ray skeleton · 🧊 glass (bones inside) · 🪩 liquid chrome · 🏆 gold statue · 🏛️ marble statue · 🏺 terracotta clay · 🎨 cel-shaded toon · 🛰️ hologram (scanlines + rim glow) · ⚡ neon rim glow · 🟢 slime jelly (bones inside) · 🌋 molten lava with glowing cracks. Pick one in **Character → Skin**, or link straight to one with `?skin=chrome`.
@@ -206,6 +210,20 @@ GAME_ROADMAP.md    plans to turn this into an actual game (god help us)
 ## 🗺️ Roadmap
 
 See [GAME_ROADMAP.md](GAME_ROADMAP.md). Highlights: wave survival, drinks-as-ammo, a timed toilet-keeper mode, and a **pee ball rolling mini-game**.
+
+## 🛠️ Built with
+
+| Tool | What it's used for |
+|---|---|
+| **Blender** | Modelling, posing and previewing the characters and props |
+| **[three.js](https://threejs.org) r160** | The 3D engine: scenes, materials, shadows, instanced grass, skinned characters |
+| three.js add-ons | `GLTFLoader` (rigged characters), `OrbitControls` (camera), `EffectComposer` + `UnrealBloomPass` + `GTAOPass` + `ShaderPass` + `OutputPass` (post-processing), `RoomEnvironment` (image-based lighting), `RoundedBoxGeometry` |
+| **Web Audio API** | Every sound is synthesized live: pink noise, filters, LFOs, HRTF spatial audio |
+| **JavaScript (ES modules)** | All the simulation, physics, UI and HUD, loaded through an import map with no build step |
+| [jsDelivr](https://www.jsdelivr.com) | CDN for three.js and the example characters |
+| [Google Fonts](https://fonts.google.com) | Inter, JetBrains Mono and Noto Serif JP |
+| [Shields.io](https://shields.io) | The badges up top |
+| **GitHub Pages** | Hosting |
 
 ## 🙏 Credits
 
