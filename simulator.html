@@ -4,6 +4,19 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>HydroSim 3D</title>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+<link rel="apple-touch-icon" href="assets/icon-180.png" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="HydroSim 3D" />
+<meta property="og:description" content="A 3D pee simulator nobody asked for: fluid arcs, bladder physics, an aim trainer and 10 scenes." />
+<meta property="og:url" content="https://yesjermo.github.io/urinal-physics/simulator.html" />
+<meta property="og:image" content="https://yesjermo.github.io/urinal-physics/assets/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="HydroSim 3D" />
+<meta name="twitter:description" content="A 3D pee simulator nobody asked for: fluid arcs, bladder physics, an aim trainer and 10 scenes." />
+<meta name="twitter:image" content="https://yesjermo.github.io/urinal-physics/assets/og.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;800&display=swap" rel="stylesheet" />
 <style>
@@ -219,6 +232,7 @@
   /* Leader-line callouts on the 3D model */
   #trainer { position: fixed; top: 54px; left: 50%; transform: translateX(-50%); z-index: 8; display: none; background: var(--card); border: 1px solid var(--edge); border-radius: 6px; font-family: 'JetBrains Mono', monospace; overflow: hidden; }
   #trainer.on { display: flex; }
+  body.trainer-on #unlock { top: auto; bottom: 108px; }   /* keep the sound pill clear of the stats board, whatever its height */
   #trainer .tcell { padding: 6px 16px; border-left: 1px solid var(--edge); text-align: center; }
   #trainer .tcell:first-child { border-left: none; background: var(--ink); color: var(--lime); }
   #trainer .tcell small { display: block; font-size: 8px; letter-spacing: .14em; color: var(--dim); }
@@ -330,7 +344,7 @@
       <option value="yaw">Turn around (yaw)</option><option value="pitch">Flip head-over-heels</option>
       <option value="roll">Cartwheel</option><option value="tumble">Tumble (all axes)</option></select></div>
     <div class="row"><label>Spin speed / direction <span id="v-spinSpeed"></span></label><input type="range" data-key="spinSpeed" min="-4" max="4" step="0.05"></div>
-    <div class="note" style="min-height:0">Tip: drag the person: left/right turns, up/down flips them upside down. Flick to keep spinning.</div>
+    <div class="note" style="min-height:0">Tip: drag the person: left/right turns, up/down flips them upside down. Flick to keep spinning. <b>Click things</b> in the scene: flush the toilet, knock props over, squish slimes, stoke the fire, poke the drips.</div>
     <label class="check"><input type="checkbox" data-key="autoAim"> Auto-aim at nearest reachable target</label>
     <label class="check"><input type="checkbox" data-key="autoFire"> 🎯 Auto-target mode (aims and fires by itself)</label>
     <div class="btns"><button id="btnResetTargets" style="flex:1">↺ Reset targets</button></div>
@@ -1180,6 +1194,69 @@ function renderTrainerCard() {
   $('trainerCard').classList.toggle('show', state.scenario === 'aim' && !trainer.active);
 }
 
+/* ---- "Drips": original little water-drop mascots that wander the outdoor scenes, flee from where the pee lands,
+        fill up with pee colour when hit, and pop into a puddle (then wander back in) ---- */
+const DRIP_SCENES = ['park', 'field', 'nyc', 'tokyo', 'paris', 'range', 'snow'];
+const dripGroup = new THREE.Group(); scene.add(dripGroup);
+const drips = [];
+function makeDrip() {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshPhysicalMaterial({ color: '#7fd8f0', roughness: 0.08, clearcoat: 1, transparent: true, opacity: 0.93 });
+  const blob = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.075, 24, 18), mat)); blob.position.y = 0.08; g.add(blob);
+  const tip = shadowed(new THREE.Mesh(new THREE.ConeGeometry(0.053, 0.1, 24), mat)); tip.position.y = 0.18; g.add(tip);
+  const white = new THREE.MeshBasicMaterial({ color: '#ffffff' }), black = new THREE.MeshBasicMaterial({ color: '#111111' });
+  for (const s of [-1, 1]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.019, 12, 10), white); e.position.set(s * 0.026, 0.1, 0.062); g.add(e);
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.009, 10, 8), black); p.position.set(s * 0.026, 0.1, 0.079); g.add(p);
+    const f = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), std('#2c6f8a')); f.position.set(s * 0.032, 0.012, 0.012); f.scale.set(1, 0.6, 1.4); g.add(f);
+  }
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.012, 0.003, 6, 14, Math.PI), black); mouth.position.set(0, 0.07, 0.072); mouth.rotation.z = Math.PI; g.add(mouth);
+  return { g, mat };
+}
+function newDripGoal(t) { const a = Math.random() * Math.PI * 2, r = 1.0 + Math.random() * 2.6; t.goal.set(Math.sin(a) * r, 0, Math.cos(a) * r); }
+function placeDrip(t) {
+  const a = Math.random() * Math.PI * 2, r = 1.4 + Math.random() * 2.2;
+  t.mesh.position.set(Math.sin(a) * r, 0, Math.cos(a) * r); t.hp = t.maxHp; t.dead = false; t.mesh.visible = true; newDripGoal(t);
+}
+function popDrip(t) {
+  score.down++; addPuddle(t.mesh.position.x, t.mesh.position.z, 25);
+  for (let i = 0; i < 6; i++) puff(t.pos, '#9be7ff', 0.25);
+  t.mesh.visible = false; t.timer = 3;
+}
+for (let i = 0; i < 5; i++) {
+  const { g, mat } = makeDrip(); dripGroup.add(g);
+  const t = addTarget({ scene: 'none', shape: 'sphere', pos: new THREE.Vector3(), r: 0.09, maxHp: 45, sound: 'water', mesh: g, drip: true, mat,
+    goal: new THREE.Vector3(), jump: 0, onDestroy() { popDrip(this); } });
+  g.userData.interact = () => { t.jump = 0.5; if (audio.started) audio.blip('water', 1); };   // click: they hop
+  drips.push(t); placeDrip(t);
+}
+const _dripBase = new THREE.Color('#7fd8f0');
+function updateDrips(dt, time) {
+  const on = DRIP_SCENES.includes(state.scenario);
+  dripGroup.visible = on;
+  for (const t of drips) {
+    t.scene = on ? state.scenario : 'none';
+    if (!on) continue;
+    if (t.dead) { if ((t.timer -= dt) <= 0) placeDrip(t); continue; }
+    const p = t.mesh.position;
+    const dx = p.x - impactCentroid.x, dz = p.z - impactCentroid.z, dImp = Math.hypot(dx, dz) || 1;
+    let tx, tz, speed;
+    if (sim.env > 0.3 && dImp < 0.8) { tx = p.x + dx / dImp; tz = p.z + dz / dImp; speed = 1.1; }        // run from the splash zone
+    else { tx = t.goal.x; tz = t.goal.z; speed = 0.32; if (Math.hypot(tx - p.x, tz - p.z) < 0.12) newDripGoal(t); }
+    const ang = Math.atan2(tx - p.x, tz - p.z);
+    p.x += Math.sin(ang) * speed * dt; p.z += Math.cos(ang) * speed * dt;
+    const rr = Math.hypot(p.x, p.z);
+    if (rr < 0.6) { p.x *= 0.6 / rr; p.z *= 0.6 / rr; } else if (rr > 4.2) { p.x *= 4.2 / rr; p.z *= 4.2 / rr; newDripGoal(t); }
+    t.mesh.rotation.y = ang;
+    const fast = speed > 0.5, hop = Math.abs(Math.sin(time * (fast ? 16 : 9) + t.goal.x * 7));
+    p.y = hop * (fast ? 0.06 : 0.03);
+    if (t.jump > 0) { t.jump -= dt; p.y += Math.sin((1 - t.jump / 0.5) * Math.PI) * 0.16; }
+    t.mesh.scale.set(1 + (1 - hop) * 0.08, 1 - (1 - hop) * 0.1, 1 + (1 - hop) * 0.08);
+    t.mat.color.copy(_dripBase).lerp(urineColor, 1 - t.hp / t.maxHp);                                // they fill up with pee colour
+    t.pos.set(p.x, p.y + 0.11, p.z);
+  }
+}
+
 function respawnSlime(t) {
   const a = Math.random() * Math.PI * 2, r = 2.6 + Math.random() * 1.2;
   t.mesh.position.set(Math.sin(a) * r, 0, Math.cos(a) * r);
@@ -1243,12 +1320,14 @@ function updateTargets(dt, t) {
     if (snowman.grp.visible) {
       snowman.grp.scale.y = Math.max(0.03, snowman.grp.scale.y - dt * 0.7);
       snowman.grp.scale.x = snowman.grp.scale.z = 1 + (1 - snowman.grp.scale.y) * 0.7;
-      if (state.scenario === 'snow') { puddleState.volume += dt * 40; puddleState.center.lerp(_v.set(0, 0.002, 1.1), 0.1); }
+      if (state.scenario === 'snow') addPuddle(0, 1.1, dt * 40);
       if (snowman.grp.scale.y <= 0.03) snowman.grp.visible = false;
     }
     snowman.snowMat.color.set('#f2dc5a');
     sm.timer -= dt; if (sm.timer <= 0) { sm.dead = false; sm.hp = sm.maxHp; snowman.grp.scale.set(1, 1, 1); snowman.grp.visible = true; }
   }
+
+  if (snowman.wobble > 0) { snowman.wobble -= dt; snowman.grp.rotation.z = Math.sin(snowman.wobble * 30) * snowman.wobble * 0.15; } else snowman.grp.rotation.z = 0;
 
   // Cans: knocked off with ballistic motion, then reset
   for (const c of knockables) {
@@ -1283,17 +1362,46 @@ function updateTargets(dt, t) {
     m.rotation.y = Math.atan2(-m.position.x, -m.position.z);
     const k = 0.62 + 0.38 * (s.hp / s.maxHp), wob = 1 + 0.06 * Math.sin(t * 6 + dist * 3);
     m.scale.set(k * wob, k / wob, k * wob);
+    if (s.squish > 0) { s.squish -= dt; m.scale.y *= 1 - s.squish * 1.4; m.scale.x *= 1 + s.squish * 0.6; m.scale.z *= 1 + s.squish * 0.6; }
     if (s.walk) m.position.y = Math.abs(Math.sin(t * 8 + dist)) * 0.035;
     s.r = (s.baseR || 0.2) * k; s.pos.set(m.position.x, (s.baseY || 0.15) * k, m.position.z);
   }
 }
 
 /* ---- Puddle, ripples ---- */
-const puddleMat = new THREE.MeshPhysicalMaterial({ color: '#f0b84a', transparent: true, opacity: 0.55, roughness: 0.05, clearcoat: 1, polygonOffset: true, polygonOffsetFactor: -2 });
-const puddle = new THREE.Mesh(new THREE.CircleGeometry(1, 48), puddleMat);
-puddle.rotation.x = -Math.PI / 2; puddle.position.y = 0.002; puddle.scale.setScalar(0.0001);
-scene.add(puddle);
-const puddleState = { volume: 0, center: new THREE.Vector3(0, 0.002, 0.6) };
+// Floor puddles: each splash zone stamps its own puddle that stays put, grows, takes the pee colour and slowly dries.
+// (Previously a single puddle slid toward every new impact, so it looked like it was crawling across the floor.)
+const PUDDLE_N = 16;
+const puddles = Array.from({ length: PUDDLE_N }, () => {
+  const m = new THREE.Mesh(new THREE.CircleGeometry(1, 40), new THREE.MeshPhysicalMaterial({ color: '#f0b84a', transparent: true, opacity: 0.55,
+    roughness: 0.05, clearcoat: 1, polygonOffset: true, polygonOffsetFactor: -2, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.visible = false; m.userData.vol = 0; scene.add(m); return m;
+});
+const puddleR = vol => Math.sqrt(Math.max(0, vol)) * 0.012;
+function addPuddle(x, z, vol) {
+  let best = null, bd = Infinity;
+  for (const p of puddles) if (p.visible) {
+    const d = Math.hypot(p.position.x - x, p.position.z - z);
+    if (d < puddleR(p.userData.vol) + 0.06 && d < bd) { bd = d; best = p; }
+  }
+  if (!best) {                                   // a new puddle: reuse a free slot, or the smallest one
+    best = puddles.reduce((a, b) => (!a.visible ? a : !b.visible ? b : a.userData.vol <= b.userData.vol ? a : b));
+    best.visible = true; best.userData.vol = 0; best.position.set(x, 0.002 + Math.random() * 0.0008, z); best.material.color.copy(urineColor);
+  }
+  const v0 = best.userData.vol;
+  best.material.color.lerp(urineColor, vol / (v0 + vol));
+  best.userData.vol = Math.min(400, v0 + vol);
+}
+function clearPuddles() { for (const p of puddles) { p.visible = false; p.userData.vol = 0; } }
+function updatePuddles(dt) {
+  const dry = state.scenario === 'snow' ? 0.05 : 0.4;          // yellow snow lingers
+  for (const p of puddles) {
+    if (!p.visible) continue;
+    p.userData.vol -= dt * dry;
+    if (p.userData.vol <= 0) { p.visible = false; continue; }
+    p.scale.setScalar(Math.max(0.0001, puddleR(p.userData.vol)));
+  }
+}
 
 const ripples = [];
 for (let i = 0; i < 28; i++) {
@@ -1742,7 +1850,7 @@ class HumanFigure {
 }
 const body = new HumanFigure();
 scene.add(body.pivot);
-window.hydrosim = { body, state, sim, THREE, SIT, targets, score, toilet, get trainer() { return trainer; } };   // handy for debugging in the console
+window.hydrosim = { camera, drips, body, state, sim, THREE, SIT, targets, score, toilet, get trainer() { return trainer; } };   // handy for debugging in the console
 body.rigs = {};
 const FIGURE_URLS = { male: HUMAN_MODEL_URLS, female: FEMALE_MODEL_URLS };
 body.loadRig(state.figure, FIGURE_URLS[state.figure], 0, rig => {
@@ -1888,8 +1996,7 @@ function onStreamHit(i, s) {
   splashAt(x, y, z, v[k], v[k + 2], speed, s.type, Math.random() < 0.45 ? 1 + (Math.random() * 3 | 0) : 0);
   if (s.type === 'water' && Math.random() < 0.06) spawnRipple(x, y, z);
   if (s.type === 'floor') {
-    puddleState.volume += 0.05;
-    puddleState.center.lerp(_o.set(x, 0.002, z), 0.02);
+    addPuddle(x, z, 0.05);
   }
   if (state.scenario === 'bathroom' && (s.bowl || s.type === 'ceramic')) {
     const ml = sim.mlPerParticle;
@@ -2131,7 +2238,7 @@ const VIEWS = {
   cross: { pos: [1.35, 1.05, 0.25], target: [0, 0.98, 0.02] },
   wide:  { pos: [3.8, 3.2, -3.2],   target: [0, 0.4, 0.3] },
   field: { pos: [3.1, 1.45, 2.6],   target: [0, 0.75, 0.55] },
-  aim:   { pos: [0.6, 1.95, -1.45],  target: [-0.05, 0.6, 1.4] },     // over-the-shoulder for the aim trainer
+  aim:   { pos: [1.5, 2.9, -2.9], target: [-0.35, 0.3, 1.8] },   // high and back over the shoulder: the body sits off to the side, not over the orbs     // over-the-shoulder for the aim trainer
 };
 let tween = null;
 function goView(name) {
@@ -2281,7 +2388,7 @@ function dissolve() {
     const a = Math.random() * Math.PI * 2, s = 0.5 + Math.random() * 2.5;
     splash.spawn(_o.x, 0.2 + Math.random() * 1.4, _o.z - 0.1, Math.cos(a) * s, Math.random() * 2.5, Math.sin(a) * s, 0.008 + Math.random() * 0.01, 2, 0.9);
   }
-  puddleState.volume = 60; puddleState.center.set(0, 0.002, 0);
+  addPuddle(0, 0.05, 60);
   audio.gloop(false);
   document.getElementById('bannerText').textContent = sim.submerged > 0
     ? "You didn't flush. The overflow dissolved you." : 'You peed out your entire body water.';
@@ -2290,7 +2397,7 @@ function dissolve() {
 }
 function respawn() {
   state.dissolved = false; state.bodyWater = 1; state.fill = 0.3; state.overdrive = false;
-  state.bowl = 0; state.flood = 0; puddleState.volume = 0;
+  state.bowl = 0; state.flood = 0; clearPuddles();
   audio.gloop(true);
   document.getElementById('banner').classList.remove('show');
   syncUI();
@@ -2335,7 +2442,6 @@ function updatePhysiology(dt) {
   urineColor.lerp(_target, Math.min(1, dt * 2.5));
   fluidUniforms.uColor.value.copy(urineColor);
   body.fluidMat.color.copy(urineColor); body.fluidMat.emissive.copy(urineColor);
-  puddleMat.color.copy(urineColor);
   peeBall.mat.color.copy(urineColor);
   updateBowl(dt);
 }
@@ -2367,7 +2473,13 @@ function updatePose(dt) {
   if (state.dissolved) { state.flip *= Math.exp(-dt * 3); state.roll *= Math.exp(-dt * 3); }
   const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
   state.yaw = wrap(state.yaw); state.flip = wrap(state.flip); state.roll = wrap(state.roll);
-  if (state.autoAim && !state.dissolved && !spinDrag && Math.abs(sim.yawVel) < 0.3) {
+  if (state.autoAim && !spinDrag) {
+    // Auto-aim owns the body: stop auto-spin, kill leftover spin momentum, and stand back upright from any flip/cartwheel
+    if (state.spin) { state.spin = false; syncUI(); }
+    sim.yawVel *= Math.exp(-dt * 10); sim.pitchVel *= Math.exp(-dt * 10);
+    state.flip += angleDiff(state.flip, 0) * Math.min(1, dt * 4); state.roll += angleDiff(state.roll, 0) * Math.min(1, dt * 4);
+  }
+  if (state.autoAim && !state.dissolved && !spinDrag && Math.abs(sim.yawVel) < 1.5) {
     body.origin.getWorldPosition(_o);
     const now = performance.now() / 1000, v = steadySpeed();       // judge reach at full pressure, not mid ramp-up
     const reach = c => { const d = Math.max(0.05, Math.hypot(c.x - _o.x, c.z - _o.z)), dy = c.y - _o.y; return v ** 4 - GRAVITY * (GRAVITY * d * d + 2 * dy * v * v) >= 0; };
@@ -2440,7 +2552,7 @@ function applyScenario(name) {
   scene.fog.near = s.fog ? s.fog[0] : 7; scene.fog.far = s.fog ? s.fog[1] : 16;
   hemi.intensity = s.hemi;
   key.intensity = s.key ?? (name === 'campfire' ? 0.25 : 2.2);
-  puddleState.volume = 0;
+  clearPuddles();
   toilet.group.visible = state.surface !== 'floor';
   toilet.water.visible = state.surface === 'water';
 }
@@ -2469,6 +2581,7 @@ function setValue(key, value) {
   state[key] = value;
   if (key === 'surface') { toilet.group.visible = value !== 'floor'; toilet.water.visible = value === 'water'; }
   if (key === 'autoFire' && value) state.autoAim = true;
+  if ((key === 'autoAim' || key === 'autoFire') && value) { state.spin = false; sim.yawVel = sim.pitchVel = 0; }
   if (key === 'figure') applyFigure(value);
 
   if (key === 'pose') body.applyPose();
@@ -2518,7 +2631,7 @@ document.querySelectorAll('[data-key]').forEach(el => {
 $('btnFlow').onclick = () => setValue('flowing', !state.flowing);
 $('btnDrink').onclick = () => consume(INTAKE[0]);
 $('btnFlush').onclick = () => { sim.flushing = 1.6; sim.stain *= 0.35; audio.flush(); };
-$('btnMop').onclick = () => { state.flood = 0; puddleState.volume = 0; sim.stain = 0; sim.stainMl = 0; };
+$('btnMop').onclick = () => { state.flood = 0; clearPuddles(); sim.stain = 0; sim.stainMl = 0; };
 $('btnClearIntake').onclick = clearIntake;
 for (const it of INTAKE) {
   const b = document.createElement('button');
@@ -2594,6 +2707,37 @@ addEventListener('pointermove', e => {
 });
 addEventListener('pointerup', () => { if (trainer.active && !state.autoFire) setValue('flowing', false); });
 $('trainerStart').onclick = e => { e.stopPropagation(); startRound(); };
+/* ---- Click to interact: flush the toilet, knock props over, squish slimes, stoke the fire, rebuild the snowman, make drips hop ---- */
+function wireInteractions() {
+  const ping = type => { if (audio.started) audio.blip(type, 1); };
+  toilet.group.userData.interact = () => { $('btnFlush').onclick(); };
+  for (const c of knockables) c.mesh.userData.interact = () => {
+    if (c.dead) return; camera.getWorldDirection(_d); _d.y = 0; _d.normalize();   // knockOff flies along _d
+    c.hp = 0; c.dead = true; c.onDestroy.call(c); ping('ceramic');
+  };
+  for (const sl of slimes) sl.mesh.userData.interact = () => {
+    if (sl.dead) return; sl.squish = 0.35; sl.hp -= sl.maxHp * 0.4; ping('water');
+    if (sl.hp <= sl.maxHp * 0.04) { sl.hp = 0; sl.dead = true; sl.onDestroy.call(sl); }
+  };
+  fire.flames.userData.interact = () => { fire.target.dead = false; fire.target.hp = fire.target.maxHp; for (let i = 0; i < 4; i++) puff(_v.set(fire.center.x, 0.4, fire.center.z), '#ffb36b', 0.2); };
+  snowman.grp.userData.interact = () => {
+    const sm = snowman.target;
+    if (sm.dead) { sm.dead = false; sm.hp = sm.maxHp; snowman.grp.scale.set(1, 1, 1); snowman.grp.visible = true; } else snowman.wobble = 0.6;
+  };
+}
+wireInteractions();
+let clickStart = null;
+container.addEventListener('pointerdown', e => { clickStart = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+container.addEventListener('pointerup', e => {
+  const c = clickStart; clickStart = null;
+  if (!c || trainer.active || Math.hypot(e.clientX - c.x, e.clientY - c.y) > 6 || performance.now() - c.t > 350) return;   // a click, not a drag
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects([...envGroups[state.scenario].children, ...dripGroup.children], true);
+  const shown = o => { for (; o; o = o.parent) if (!o.visible) return false; return true; };   // raycasts ignore .visible, so check it
+  for (const h of hits) { if (!shown(h.object)) continue; let o = h.object; while (o && !o.userData.interact) o = o.parent; if (o) { o.userData.interact(h.point); break; } }
+});
 const held = {};
 window.addEventListener('keydown', e => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
@@ -2678,6 +2822,7 @@ function frame() {
   updateTargets(dt, t);
   grassTime.value = t;
   updateTrainer(dt, t);
+  updateDrips(dt, t);
   updatePreview();
 
   for (const k of IMPACT_TYPES) impacts[k] = 0;
@@ -2698,10 +2843,7 @@ function frame() {
     s.scale.setScalar(s.userData.size * (0.5 + k)); s.material.opacity = 0.5 * (1 - k);
     if (k >= 1) s.visible = false;
   }
-  // Yellow snow lingers; everywhere else puddles slowly evaporate
-  puddleState.volume = Math.max(0, puddleState.volume - dt * (state.scenario === 'snow' ? 0.05 : 0.4));
-  puddle.position.copy(puddleState.center);
-  puddle.scale.setScalar(Math.max(0.0001, Math.sqrt(puddleState.volume) * 0.012));
+  updatePuddles(dt);
 
   if (state.spatial) {
     body.origin.getWorldPosition(streamAudio.position);
@@ -2736,8 +2878,8 @@ function frame() {
     $('bodyWarn').textContent = state.dissolved ? '💛 You are a pee ball now.' : state.bodyWater < 0.25 ? '⚠ Critically drained — about to dissolve!'
       : state.bodyWater < 0.6 ? '⚠ Losing body water fast' : '';
     const u = state.fill, urge = $('urge');
-    urge.textContent = u > 0.95 ? 'URGENT!' : u > 0.8 ? 'Strong' : u > 0.55 ? 'Moderate' : u > 0.3 ? 'Mild' : 'None';
-    urge.style.color = u > 0.95 ? '#ff5d6c' : u > 0.8 ? '#ff9f43' : u > 0.55 ? '#f5c14b' : '#4fd6e8';
+    urge.textContent = trainer.active ? 'Infinite (trainer)' : u > 0.95 ? 'URGENT!' : u > 0.8 ? 'Strong' : u > 0.55 ? 'Moderate' : u > 0.3 ? 'Mild' : 'None';
+    urge.style.color = trainer.active ? '#4fd6e8' : u > 0.95 ? '#ff5d6c' : u > 0.8 ? '#ff9f43' : u > 0.55 ? '#f5c14b' : '#4fd6e8';
     $('t-pres').textContent = Math.round(sim.pdet) + ' cmH₂O';
     $('t-flow').textContent = sim.flow.toFixed(1) + ' mL/s';
     $('t-vel').textContent = (sim.env > 0.02 ? sim.speed : 0).toFixed(2) + ' m/s';
@@ -2799,6 +2941,7 @@ const urgeText = f => f > 0.95 ? 'URGENT' : f > 0.8 ? 'STRONG' : f > 0.55 ? 'MOD
 function logEvent(label) { hud.events.push({ t: performance.now() / 1000, label }); if (hud.events.length > 80) hud.events.shift(); }
 
 function systemStatus() {
+  if (trainer.active) return ['AIM TRAINER', `${Math.max(0, trainer.time).toFixed(0)} S LEFT · ${trainer.pops} POPS · ${Math.round(trainerAcc() * 100)}% ON TARGET`, true];
   if (state.dissolved) return ['PEE BALL', 'BODY WATER DEPLETED · RESPAWN TO CONTINUE', true];
   if (sim.submerged > 0) return ['DISSOLVING', 'FLOOD CONTACT · FLUSH AND MOP NOW', true];
   if (sim.spillT > 0) return ['OVERFLOW', `BOWL AT ${BOWL_CAP_ML} ML · FLUSH REQUIRED`, true];
@@ -2849,7 +2992,7 @@ function callout(key, title, sub, world, i) {
 }
 function updateCallouts() {
   const list = [];
-  if (state.labels) {
+  if (state.labels && !trainer.active) {           // no clutter while you're aiming
     if (body.root.visible && !state.dissolved) {
       list.push(['bladder', 'BLADDER', `${Math.round(state.fill * CAPACITY_ML)} ML · ${Math.round(sim.pdet)} CMH₂O`, body.bladder.getWorldPosition(_c1)]);
       list.push(['exit', 'EXIT NOZZLE', `${(sim.env > 0.02 ? sim.speed : 0).toFixed(1)} M/S · AIM ${Math.round(state.aim * 57.3)}°`, body.origin.getWorldPosition(_c2)]);
@@ -2892,12 +3035,13 @@ function hudFrame(dt) {
   $('hdrStatus').textContent = status; $('hdrDot').classList.toggle('on', active);
   $('chipText').textContent = status; $('chipSub').textContent = sub;
   $('trainer').classList.toggle('on', trainer.active);
+  document.body.classList.toggle('trainer-on', trainer.active);
   if (trainer.active) {
     $('tTime').textContent = Math.max(0, trainer.time).toFixed(1); $('tPops').textContent = trainer.pops;
     $('tAcc').textContent = Math.round(trainerAcc() * 100) + '%'; $('tTtk').textContent = trainerTTK().toFixed(2) + ' s'; $('tBest').textContent = trainer.best;
   }
   $('hudMl').textContent = Math.round(state.fill * CAPACITY_ML);
-  $('hudUrge').textContent = urgeText(state.fill);
+  $('hudUrge').textContent = trainer.active ? 'INFINITE' : urgeText(state.fill);
   drawSpark();
   $('hudP').textContent = Math.round(sim.pdet);
   const n = Math.round(THREE.MathUtils.clamp(sim.pdet / 110, 0, 1) * SEG_N);
