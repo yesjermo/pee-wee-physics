@@ -217,6 +217,23 @@
   #opLog .foot { display: flex; justify-content: space-between; font-size: 8.5px; color: var(--dim); letter-spacing: .1em; margin-top: 1px; }
 
   /* Leader-line callouts on the 3D model */
+  #trainer { position: fixed; top: 54px; left: 50%; transform: translateX(-50%); z-index: 8; display: none; background: var(--card); border: 1px solid var(--edge); border-radius: 6px; font-family: 'JetBrains Mono', monospace; overflow: hidden; }
+  #trainer.on { display: flex; }
+  #trainer .tcell { padding: 6px 16px; border-left: 1px solid var(--edge); text-align: center; }
+  #trainer .tcell:first-child { border-left: none; background: var(--ink); color: var(--lime); }
+  #trainer .tcell small { display: block; font-size: 8px; letter-spacing: .14em; color: var(--dim); }
+  #trainer .tcell b { font: 800 18px/1.2 Inter, sans-serif; }
+  #trainerCard { position: fixed; left: 50%; top: 44%; transform: translate(-50%, -50%); z-index: 8; width: min(400px, 90vw); display: none; background: var(--card); border: 1px solid var(--edge); border-radius: 8px; padding: 16px 18px; box-shadow: 0 20px 50px -24px rgba(0,0,0,.5); }
+  #trainerCard.show { display: block; }
+  #trainerCard h3 { margin: 0 0 6px; font: 800 20px Inter, sans-serif; }
+  #trainerCard p { margin: 0 0 12px; font-size: 12.5px; color: #3d424b; }
+  #trainerCard .tres { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; font-family: 'JetBrains Mono', monospace; }
+  #trainerCard .tres:empty { display: none; }
+  #trainerCard .tres div { background: #fff; border: 1px solid var(--edge); border-radius: 4px; padding: 6px; text-align: center; }
+  #trainerCard .tres small { display: block; font-size: 8px; letter-spacing: .12em; color: var(--dim); }
+  #trainerCard .tres b { font: 800 16px Inter, sans-serif; }
+  #trainerCard .tfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; font: 600 10px 'JetBrains Mono', monospace; letter-spacing: .1em; color: var(--dim); }
+  #trainerCard .tfoot b { color: var(--ink); font-size: 14px; }
   #callouts { position: fixed; inset: 0; pointer-events: none; z-index: 4; }
   #callouts svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .co { position: absolute; font-family: 'JetBrains Mono', monospace; background: rgba(251,251,252,.95); border: 1px solid var(--edge); border-radius: 3px; padding: 3px 7px; white-space: nowrap; }
@@ -260,6 +277,19 @@
 </header>
 <div id="callouts"><svg></svg></div>
 <div id="statusChip"><small>MODE · SYSTEM STATE</small><b id="chipText">STANDBY</b><span id="chipSub"></span></div>
+<div id="trainer">
+  <div class="tcell"><small>AIM TRAINER</small><b id="tTime">60.0</b></div>
+  <div class="tcell"><small>POPS</small><b id="tPops">0</b></div>
+  <div class="tcell"><small>ACCURACY</small><b id="tAcc">0%</b></div>
+  <div class="tcell"><small>AVG TTK</small><b id="tTtk">0.00 s</b></div>
+  <div class="tcell"><small>BEST</small><b id="tBest">0</b></div>
+</div>
+<div id="trainerCard">
+  <h3>🎯 Aim trainer</h3>
+  <p>Pop as many orbs as you can in 60 seconds. <b>Move the mouse</b> to aim, <b>hold the mouse button</b> (or <kbd>Space</kbd>) to pee. Unlimited bladder during the round. Turn on <i>Auto-target mode</i> to watch the robot do it.</p>
+  <div class="tres" id="trainerResult"></div>
+  <div class="tfoot"><span>BEST <b id="trainerBest">0</b></span><button class="primary" id="trainerStart">▶ Start round</button></div>
+</div>
 <div id="opLog">
   <div class="head">OPERATION LOG<span class="idx">LAST 60 S</span></div>
   <div class="rowx"><button id="opPlay" title="Release / stop (Space)">▶</button>
@@ -493,6 +523,7 @@ const SCENARIOS = {
   tokyo:    { label: '🏮 Tokyo neon alley',     bg: '#06050d', hemi: 0.35, fog: [8, 40], key: 0.35 },
   paris:    { label: '🥐 Paris boulevard',      bg: '#2b3552', hemi: 0.75, fog: [12, 75] },
   field:    { label: '🌾 Grass field',          bg: '#d5e6ec', hemi: 1.15, fog: [14, 70] },
+  aim:      { label: '🎯 Aim trainer',          bg: '#171a21', hemi: 0.85, fog: [10, 40] },
 };
 
 const state = {
@@ -579,6 +610,7 @@ const FLOOR_TEX = {
   tokyo:    canvasTex(tile('#3a3b42', '#2b2c32'), 16),
   paris:    canvasTex(speckle('#8a8378', ['#9b9488', '#77705f', '#a8a090'], 2600, 7), 14),
   field:    canvasTex(speckle('#4f7f37', ['#5d9142', '#44702f', '#6aa04b'], 3000, 6), 16),
+  aim:      canvasTex(tile('#1f232b', '#2d333d'), 18),
 };
 const floorMat = new THREE.MeshStandardMaterial({ map: FLOOR_TEX.bathroom, roughness: 0.4, metalness: 0.05 });
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), floorMat);
@@ -1071,6 +1103,81 @@ const grassTime = { value: 0 };
     for (let k = 0; k <= 16; k++) { const f = k / 16; pts.push(new THREE.Vector3(x1 + (x2 - x1) * f + dy, 6.0 - Math.sin(f * Math.PI) * 0.45, z1 + (z2 - z1) * f)); }
     g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wireMat));
   }
+}
+
+/* ---- Aim trainer: glowing orbs in a training room, 60 s rounds, mouse aim, accuracy and time-to-kill ---- */
+const ROUND_S = 60;
+const trainer = { active: false, time: 0, pops: 0, fireT: 0, onT: 0, ttk: [], best: 0, prevPower: 1, orbs: [], last: null };
+try { trainer.best = +localStorage.getItem('up-aim-best') || 0; } catch (e) { /* storage blocked */ }
+{
+  const g = envGroups.aim;
+  const wallMat = std('#252a33', { roughness: 0.9 });
+  for (const [x, z, ry, w] of [[0, 3.2, Math.PI, 8], [-3.6, 0.6, Math.PI / 2, 6], [3.6, 0.6, -Math.PI / 2, 6]]) {
+    const wall = new THREE.Mesh(new THREE.PlaneGeometry(w, 3), wallMat); wall.position.set(x, 1.5, z); wall.rotation.y = ry; wall.receiveShadow = true; g.add(wall);
+  }
+  const spot = new THREE.Mesh(new THREE.RingGeometry(0.32, 0.36, 48), new THREE.MeshBasicMaterial({ color: '#d6ff3d' }));
+  spot.rotation.x = -Math.PI / 2; spot.position.y = 0.005; g.add(spot);                     // where you stand
+  const ringMat = new THREE.MeshBasicMaterial({ color: '#d6ff3d' });
+  for (let i = 0; i < 3; i++) {
+    const m = new THREE.Group();
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 18), new THREE.MeshStandardMaterial({ color: '#4fd6e8', emissive: '#4fd6e8', emissiveIntensity: 0.9, roughness: 0.3 }));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.4, 0.07, 8, 36), ringMat);
+    m.add(orb, ring); m.visible = false; g.add(m);
+    const t = addTarget({ scene: 'aim', shape: 'sphere', pos: new THREE.Vector3(), r: 0.09, maxHp: 10, sound: 'ceramic', mesh: m, orb, ring, trainer: true,
+      onDestroy() { popOrb(this); } });
+    t.dead = true; t.timer = 0.1 * i; trainer.orbs.push(t);
+  }
+}
+/** Respawn an orb somewhere in a ±65° arc in front of you, within reach of the stream at trainer power. */
+function spawnOrb(t) {
+  const a = (Math.random() - 0.5) * 2.3, d = 0.75 + Math.random() * 1.45, y = 0.15 + Math.random() * 0.95, r = 0.06 + Math.random() * 0.05;
+  t.pos.set(Math.sin(a) * d, y, Math.cos(a) * d); t.r = r; t.maxHp = t.hp = Math.round(6 + r * 80); t.dead = false;
+  t.mesh.position.copy(t.pos); t.mesh.scale.setScalar(r); t.mesh.visible = true; t.born = performance.now() / 1000; t.y0 = y;
+}
+function popOrb(t) {
+  for (let i = 0; i < 6; i++) puff(t.pos, '#d6ff3d', 0.18);
+  t.mesh.visible = false; t.timer = 0.25;
+  if (trainer.active) { trainer.pops++; trainer.ttk.push(performance.now() / 1000 - t.born); }
+}
+const trainerAcc = () => (trainer.fireT > 0.05 ? trainer.onT / trainer.fireT : 0);   // share of firing time spent on an orb
+const trainerTTK = () => (trainer.ttk.length ? trainer.ttk.reduce((a, b) => a + b, 0) / trainer.ttk.length : 0);
+const trainerScore = () => Math.round(trainer.pops * 100 * (0.5 + 0.5 * trainerAcc()));
+function updateTrainer(dt, t) {
+  for (const o of trainer.orbs) {
+    if (o.dead) { if (state.scenario === 'aim' && (o.timer -= dt) <= 0) spawnOrb(o); continue; }
+    o.mesh.position.y = o.pos.y = o.y0 + Math.sin(t * 1.6 + o.r * 50) * 0.04;            // gentle bob
+    o.ring.rotation.z += dt * 2.2;
+    o.orb.material.emissiveIntensity = 0.45 + 0.7 * (o.hp / o.maxHp);
+  }
+  if (!trainer.active) return;
+  if (state.flowing && sim.env > 0.3) { trainer.fireT += dt; if (sim.aimOnTarget) trainer.onT += dt; }
+  trainer.time -= dt;
+  if (trainer.time <= 0) endRound();
+}
+function startRound() {
+  if (state.scenario !== 'aim') setValue('scenario', 'aim');
+  if (state.dissolved) respawn();
+  Object.assign(trainer, { active: true, time: ROUND_S, pops: 0, fireT: 0, onT: 0, ttk: [], prevPower: state.power, last: null });
+  state.power = 1.6; state.yaw = 0; state.flip = state.roll = 0; state.spin = false; sim.yawVel = sim.pitchVel = 0;
+  for (const o of trainer.orbs) { o.dead = true; o.timer = 0.15; o.mesh.visible = false; }
+  controls.enabled = false; goView('aim');
+  $('trainerCard').classList.remove('show'); syncUI();
+}
+function endRound() {
+  if (!trainer.active) return;
+  trainer.active = false; setValue('flowing', false); state.power = trainer.prevPower; controls.enabled = true;
+  const s = trainerScore();
+  trainer.last = { score: s, pops: trainer.pops, acc: trainerAcc(), ttk: trainerTTK(), record: s > trainer.best };
+  if (s > trainer.best) { trainer.best = s; try { localStorage.setItem('up-aim-best', String(s)); } catch (e) { /* storage blocked */ } }
+  renderTrainerCard(); syncUI();
+}
+function renderTrainerCard() {
+  const L = trainer.last;
+  $('trainerResult').innerHTML = L
+    ? `<div><small>SCORE</small><b>${L.score}${L.record ? ' ★' : ''}</b></div><div><small>POPS</small><b>${L.pops}</b></div><div><small>ACCURACY</small><b>${Math.round(L.acc * 100)}%</b></div><div><small>AVG TTK</small><b>${L.ttk.toFixed(2)} s</b></div>`
+    : '';
+  $('trainerBest').textContent = trainer.best;
+  $('trainerCard').classList.toggle('show', state.scenario === 'aim' && !trainer.active);
 }
 
 function respawnSlime(t) {
@@ -1635,7 +1742,7 @@ class HumanFigure {
 }
 const body = new HumanFigure();
 scene.add(body.pivot);
-window.hydrosim = { body, state, sim, THREE, SIT, targets, score, toilet };   // handy for debugging in the console
+window.hydrosim = { body, state, sim, THREE, SIT, targets, score, toilet, get trainer() { return trainer; } };   // handy for debugging in the console
 body.rigs = {};
 const FIGURE_URLS = { male: HUMAN_MODEL_URLS, female: FEMALE_MODEL_URLS };
 body.loadRig(state.figure, FIGURE_URLS[state.figure], 0, rig => {
@@ -1730,6 +1837,7 @@ class ParticlePool {
 }
 
 const _surf = { y: 0, type: 'floor', bowl: false, flood: false };
+sim.landing = new THREE.Vector3();
 function surfaceAt(x, z) {
   _surf.bowl = _surf.flood = false;
   if (state.scenario === 'bathroom') {
@@ -2023,6 +2131,7 @@ const VIEWS = {
   cross: { pos: [1.35, 1.05, 0.25], target: [0, 0.98, 0.02] },
   wide:  { pos: [3.8, 3.2, -3.2],   target: [0, 0.4, 0.3] },
   field: { pos: [3.1, 1.45, 2.6],   target: [0, 0.75, 0.55] },
+  aim:   { pos: [0.6, 1.95, -1.45],  target: [-0.05, 0.6, 1.4] },     // over-the-shoulder for the aim trainer
 };
 let tween = null;
 function goView(name) {
@@ -2116,6 +2225,28 @@ function updateBowl(dt) {
 const previewGeo = new THREE.BufferGeometry().setFromPoints(Array.from({ length: 70 }, () => new THREE.Vector3()));
 const previewLine = new THREE.Line(previewGeo, new THREE.LineDashedMaterial({ color: '#4fd6e8', dashSize: 0.03, gapSize: 0.02, transparent: true, opacity: 0.85 }));
 previewLine.frustumCulled = false; scene.add(previewLine);
+// Landing reticle: where the stream will land (or what it will hit); shown with auto-aim or in the aim trainer
+const reticle = new THREE.Mesh(new THREE.RingGeometry(0.03, 0.042, 32), new THREE.MeshBasicMaterial({ color: '#d6ff3d', depthTest: false, transparent: true }));
+reticle.renderOrder = 10; scene.add(reticle);
+/** Full-flow stream speed (what you get once the stream is up to pressure): used for targeting decisions. */
+function steadySpeed() {
+  const boost = state.overdrive ? OVERDRIVE : 1;
+  const p = Math.min(1, 0.2 + 0.8 * Math.sqrt(Math.max(trainer.active ? 1 : state.fill, 0.06))) * boost;
+  return (1.2 + 2.0 * Math.min(1, p)) * boost * state.power;
+}
+/** Where to aim at a target, leading the ones that move (slimes, Gloops) by the stream's flight time. */
+const _lead = new THREE.Vector3();
+function leadPoint(t, v) {
+  _lead.copy(aimPoint(t));
+  if (t.slime && !t.dead) {
+    const dist = Math.hypot(t.mesh.position.x, t.mesh.position.z);
+    if (dist > 0.75) {
+      const d = Math.hypot(_lead.x - _o.x, _lead.z - _o.z), tf = d / Math.max(0.6, v * 0.85), sp = t.speed || 0.18;
+      _lead.x -= (t.mesh.position.x / dist) * sp * tf; _lead.z -= (t.mesh.position.z / dist) * sp * tf;
+    }
+  }
+  return _lead;
+}
 function expectedSpeed() {
   if (sim.env > 0.3) return sim.speed;
   const boost = state.overdrive ? OVERDRIVE : 1;
@@ -2125,14 +2256,19 @@ function expectedSpeed() {
 function updatePreview() {
   body.origin.getWorldPosition(_o); body.getDirection(_v);
   const v = expectedSpeed(), pos = previewGeo.attributes.position, step = 0.012;
+  sim.aimOnTarget = false;
   let x = _o.x, y = _o.y, z = _o.z, vx = _v.x * v, vy = _v.y * v, vz = _v.z * v, landed = false;
   for (let i = 0; i < 70; i++) {
     pos.setXYZ(i, x, y, z);
     if (landed) continue;
     x += vx * step; vy -= GRAVITY * step; y += vy * step; z += vz * step;
     const s = surfaceAt(x, z);
-    if (y <= s.y) { y = s.y; landed = true; }
+    const hitT = hitTarget(x, y, z);
+    if (y <= s.y || hitT) { if (y < s.y) y = s.y; landed = true; sim.aimOnTarget = !!(hitT && hitT.trainer); }
   }
+  sim.landing.set(x, y, z);
+  reticle.position.copy(sim.landing); reticle.lookAt(camera.position);
+  reticle.visible = !state.dissolved && (state.scenario === 'aim' || state.autoAim);
   sim.range = Math.hypot(x - _o.x, z - _o.z);
   pos.needsUpdate = true; previewLine.computeLineDistances();
   previewLine.visible = state.preview && !state.dissolved;
@@ -2161,6 +2297,7 @@ function respawn() {
 }
 
 function updatePhysiology(dt) {
+  if (trainer.active) state.fill = 1;                // unlimited ammo during an aim-trainer round
   // Hydration slowly falls (you need to keep drinking); diuretics & pigments wear off
   state.hydration = Math.max(0, state.hydration - dt * 0.0025);
   sim.diuretic *= Math.exp(-dt / 30);
@@ -2232,32 +2369,42 @@ function updatePose(dt) {
   state.yaw = wrap(state.yaw); state.flip = wrap(state.flip); state.roll = wrap(state.roll);
   if (state.autoAim && !state.dissolved && !spinDrag && Math.abs(sim.yawVel) < 0.3) {
     body.origin.getWorldPosition(_o);
-    const now = performance.now() / 1000, v = expectedSpeed();
-    // Pick a live target that the stream can actually reach, skip ones we recently gave up on, and stick with the current one
-    let best = null, bestScore = Infinity; const bestPt = new THREE.Vector3();
+    const now = performance.now() / 1000, v = steadySpeed();       // judge reach at full pressure, not mid ramp-up
+    const reach = c => { const d = Math.max(0.05, Math.hypot(c.x - _o.x, c.z - _o.z)), dy = c.y - _o.y; return v ** 4 - GRAVITY * (GRAVITY * d * d + 2 * dy * v * v) >= 0; };
+    // Score candidates: close, little turning needed, nearly dead; stick with the current lock
+    let best = null, bestScore = Infinity, unreachable = 0; const bestPt = new THREE.Vector3();
     for (const t of targets) {
       if (t.dead || t.scene !== state.scenario || t.maxHp === Infinity || (t.ignoreUntil || 0) > now) continue;
-      const c = aimPoint(t), d = Math.max(0.05, Math.hypot(c.x - _o.x, c.z - _o.z)), dy = c.y - _o.y;
-      if (v ** 4 - GRAVITY * (GRAVITY * d * d + 2 * dy * v * v) < 0) continue;          // out of range at this power
-      const sc = d - (t === aimLock.target ? 0.8 : 0);
+      const c = leadPoint(t, v);
+      if (!reach(c)) { unreachable++; continue; }
+      const d = Math.hypot(c.x - _o.x, c.z - _o.z), turn = Math.abs(angleDiff(state.yaw, Math.atan2(c.x - _o.x, c.z - _o.z)));
+      const sc = d + turn * 0.5 - (1 - t.hp / t.maxHp) * 0.4 - (t === aimLock.target ? 0.8 : 0);
       if (sc < bestScore) { bestScore = sc; best = t; bestPt.copy(c); }
     }
+    // No targets in the bathroom: aim into the bowl instead
+    let bowl = false;
+    if (!best && state.scenario === 'bathroom' && toilet.group.visible) { bestPt.set(0, bowlLevel(), TOILET_Z + 0.02); bowl = reach(bestPt); }
+    // Targets exist but none in reach: turn the stream power up
+    if (!best && unreachable && state.power < 2) state.power = Math.min(2, state.power + dt * 0.6);
     if (best !== aimLock.target) { aimLock.target = best; aimLock.lastHp = best ? best.hp : 0; aimLock.stuck = 0; }
-    if (best) {
+    if (best || bowl) {
+      aimLock.idle = 0;
       const d = Math.max(0.05, Math.hypot(bestPt.x - _o.x, bestPt.z - _o.z)), dy = bestPt.y - _o.y;
-      const yaw = Math.atan2(bestPt.x - _o.x, bestPt.z - _o.z);
-      state.yaw += angleDiff(state.yaw, yaw) * Math.min(1, dt * 5);
+      const yaw = Math.atan2(bestPt.x - _o.x, bestPt.z - _o.z), err = angleDiff(state.yaw, yaw);
+      state.yaw += THREE.MathUtils.clamp(err * Math.min(1, dt * 6), -3.5 * dt, 3.5 * dt);   // smooth, turn-rate limited
       // Ballistic aim: θ = atan((v² − √(v⁴ − g(g·d² + 2·dy·v²))) / (g·d))
       const disc = v ** 4 - GRAVITY * (GRAVITY * d * d + 2 * dy * v * v);
       const a = Math.atan((v * v - Math.sqrt(Math.max(0, disc))) / (GRAVITY * d));
-      state.aim += (THREE.MathUtils.clamp(a, -0.8, 0.75) - state.aim) * Math.min(1, dt * 5);
-      // Not taking damage for a while (blocked by the crate, a car, ...)? Give up on it for 3 s and move on
-      if (sim.env > 0.6) {
+      state.aim += (THREE.MathUtils.clamp(a, -0.8, 0.75) - state.aim) * Math.min(1, dt * 6);
+      const aligned = Math.abs(err) < 0.15;
+      // Only judge "stuck" at full pressure while lined up: blocked targets get skipped for 3 s
+      if (best && sim.env > 0.85 && aligned) {
         if (best.hp < aimLock.lastHp - 0.5) { aimLock.lastHp = best.hp; aimLock.stuck = 0; }
-        else if ((aimLock.stuck += dt) > 1.2) { best.ignoreUntil = now + 3; aimLock.target = null; }
+        else if ((aimLock.stuck += dt) > 1.4) { best.ignoreUntil = now + 3; aimLock.target = null; }
       }
-      if (state.autoFire && !state.flowing && Math.abs(angleDiff(state.yaw, yaw)) < 0.2 && (state.fill > 0.05 || state.overdrive)) setValue('flowing', true);
-    } else if (state.autoFire && state.flowing) setValue('flowing', false);   // nothing left to shoot
+      const ammo = trainer.active || state.overdrive || state.fill > (bowl ? 0.4 : 0.05);
+      if (state.autoFire && !state.flowing && aligned && ammo) setValue('flowing', true);
+    } else if (state.autoFire && state.flowing && (aimLock.idle = (aimLock.idle || 0) + dt) > 1.2) setValue('flowing', false);   // grace period
   }
 }
 
@@ -2326,6 +2473,7 @@ function setValue(key, value) {
 
   if (key === 'pose') body.applyPose();
   if (key === 'scenario' && value !== 'bathroom' && body.sitting) { state.figure = 'male'; applyFigure('male'); }
+  if (key === 'scenario' && value !== 'aim') endRound();
   if (key === 'scenario') { applyScenario(value); if (value === 'range' && !state.autoAim) state.autoAim = true; }
   if (key === 'overdrive' && value && !state.flowing) state.flowing = true;
   syncUI();
@@ -2350,6 +2498,7 @@ function syncUI() {
   const s = SUBSTANCES[state.substance];
   $('colorNote').textContent = s.note || autoNote();
   $('btnRespawn').style.display = state.dissolved ? '' : 'none';
+  renderTrainerCard();
   $('btnLabels').classList.toggle('active', state.labels); $('btnTurntable').classList.toggle('active', state.spin); $('btnStudio').classList.toggle('active', state.studio);
   if (!state.dissolved) $('banner').classList.remove('show');
 }
@@ -2412,6 +2561,7 @@ function pickBody(e) {
 }
 // Capture phase on the container runs before OrbitControls, so a drag on the body never orbits the camera
 container.addEventListener('pointerdown', e => {
+  if (trainer.active && e.button === 0) { e.stopPropagation(); if (!state.autoFire) setValue('flowing', true); return; }   // hold to pee
   if (e.button !== 0 || !pickBody(e)) return;
   e.stopPropagation();
   spinDrag = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId };
@@ -2436,6 +2586,14 @@ const endSpin = () => {
 container.addEventListener('pointerup', endSpin);
 container.addEventListener('pointercancel', endSpin);
 
+addEventListener('pointermove', e => {
+  if (!trainer.active || state.autoFire) return;
+  const nx = (e.clientX / innerWidth) * 2 - 1, ny = (e.clientY / innerHeight) * 2 - 1;
+  state.yaw = -nx * 1.25;                                        // camera looks +Z from behind: screen-right is -X
+  state.aim = THREE.MathUtils.clamp(-ny * 0.95 + 0.05, -0.8, 0.75);
+});
+addEventListener('pointerup', () => { if (trainer.active && !state.autoFire) setValue('flowing', false); });
+$('trainerStart').onclick = e => { e.stopPropagation(); startRound(); };
 const held = {};
 window.addEventListener('keydown', e => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
@@ -2519,6 +2677,7 @@ function frame() {
   updatePeeBall(t);
   updateTargets(dt, t);
   grassTime.value = t;
+  updateTrainer(dt, t);
   updatePreview();
 
   for (const k of IMPACT_TYPES) impacts[k] = 0;
@@ -2732,6 +2891,11 @@ function hudFrame(dt) {
   $('hdrTime').textContent = mmss(run);
   $('hdrStatus').textContent = status; $('hdrDot').classList.toggle('on', active);
   $('chipText').textContent = status; $('chipSub').textContent = sub;
+  $('trainer').classList.toggle('on', trainer.active);
+  if (trainer.active) {
+    $('tTime').textContent = Math.max(0, trainer.time).toFixed(1); $('tPops').textContent = trainer.pops;
+    $('tAcc').textContent = Math.round(trainerAcc() * 100) + '%'; $('tTtk').textContent = trainerTTK().toFixed(2) + ' s'; $('tBest').textContent = trainer.best;
+  }
   $('hudMl').textContent = Math.round(state.fill * CAPACITY_ML);
   $('hudUrge').textContent = urgeText(state.fill);
   drawSpark();
