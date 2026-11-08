@@ -99,7 +99,7 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 - **Figures:** **skeleton man** (every male version: a ghost-glass body with skull, ribcage, spine, pelvis and limb bones following every animation, kidneys and bladder inside, pixel censor) · female (sitting on the toilet, her own textures) · or load your own `.glb` (it becomes a skeleton too)
 - **Poses:** idle, sad slump, sneaky crouch, nodding, head shake, walk, run
 - 🐶 **Beagle:** tricolour coat, floppy ears, wagging white-tipped tail. **Lifts a hind leg** when it goes, tongue out when it's desperate. The camera presets shrink to dog height.
-- ⛲ **Brussels fountain statue:** a little bronze statue on a stone pedestal over a fountain basin, wearing one of the costumes the real one is famous for (red tunic with gold trim, cape, feathered cap). Fully clothed bronze; the water leaves a fountain spout. The basin slowly takes on the colour.
+- ⛲ **Brussels fountain statue:** a chubby bronze toddler (big round head, full cheeks, short dimpled arms and legs) on a stone pedestal over a fountain basin, always dressed in a red smock with gold trim. The water leaves a fountain spout, and the basin slowly takes on the colour.
 - **11 skins** for the standing figure: 💀 X-ray skeleton · 🧊 glass (bones inside) · 🪩 liquid chrome · 🏆 gold statue · 🏛️ marble statue · 🏺 terracotta clay · 🎨 cel-shaded toon · 🛰️ hologram (scanlines + rim glow) · ⚡ neon rim glow · 🟢 slime jelly (bones inside) · 🌋 molten lava with glowing cracks. Pick one in **Character → Skin**, or link straight to one with `?skin=chrome`.
 
 ### 🎬 Rendering
