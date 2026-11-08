@@ -22,7 +22,6 @@
 ![Flush status](https://img.shields.io/badge/flush_status-PLEASE-ff5d6c)
 ![Toilet](https://img.shields.io/badge/toilet-rendered_in_4K_feelings-white)
 ![Pee ball](https://img.shields.io/badge/pee_ball_mode-unlocked-yellow)
-![Made with](https://img.shields.io/badge/made_with-Claude_Code-d97757)
 
 </div>
 
@@ -82,7 +81,7 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 
 ### 🧍 Characters
 - A rigged, animated human with a **pixel-mosaic censor** (we're classy here)
-- **Skins:** realistic · clay sculpt · muscle anatomy · **skeleton** · gold statue · chrome · Gloop costume
+- **Skins:** **anatomy sculpt** (default: ZBrush-style grey matcap with sculpted pecs, abs, delts, biceps, quads & calves) · skin tone · clay · muscle anatomy · **skeleton** · gold statue · chrome · Gloop costume
 - **Poses:** idle, sad slump, sneaky crouch, nodding, head shake, walk, run
 - **Facial expressions:** relieved, straining, embarrassed (with blush), surprised... with auto-blinking. **Auto mode** reacts to how full you are.
 - **Female figure** sitting on the toilet (clothed)
@@ -94,6 +93,10 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 - 🔥 **Campfire:** put it out (sizzle + steam)
 - ⛄ **Snowman:** turns yellow, then melts. Yellow snow lingers. As it should.
 - 🌳 **Park:** tree + fire hydrant (classic)
+- 🗽 **New York street:** brick walk-ups with fire escapes, a parked yellow cab, hydrant, trash cans
+- 🏮 **Tokyo neon alley:** neon signs, a glowing vending machine, paper lanterns (crank the power to reach them)
+- 🥐 **Paris boulevard:** Haussmann façades, café table with wine bottles, wicker chairs, a distant iron tower
+- 🎯 **Auto-target mode** aims *and* fires by itself, skips targets it can't reach, and gives up on anything blocked after 1.2 s
 - 🎯 **Auto-aim** solves the ballistic equation for you:
   $$\theta = \arctan\left(\frac{v^2 - \sqrt{v^4 - g(gd^2 + 2\,\Delta y\, v^2)}}{g\,d}\right)$$
   *(Yes, there's a physics equation in a pee simulator README. You're welcome.)*
@@ -142,7 +145,6 @@ See [GAME_ROADMAP.md](GAME_ROADMAP.md). Highlights: wave survival, drinks-as-amm
 - [three.js](https://threejs.org) (MIT)
 - The **Xbot** and **Michelle** characters are loaded at runtime from the official three.js examples. They're not bundled in this repo, and their licenses are theirs.
 - Pink noise uses Paul Kellet's refined filter
-- Built with [Claude Code](https://claude.com/claude-code)
 
 ## ⚠️ Disclaimer
 
