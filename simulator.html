@@ -267,6 +267,13 @@
   body.embed #statusChip { left: 12px; bottom: 150px; }
   body.embed .toggles { bottom: 92px; }
 </style>
+<!-- The import map must come before any module preload, or the browser may ignore it and fail to resolve "three" -->
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
 <!-- Load faster: fetch the engine, its core add-ons and the 1.2 MB character model in parallel right away,
      instead of discovering them one import (or one script) at a time -->
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
@@ -277,12 +284,6 @@
 <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/geometries/RoundedBoxGeometry.js" />
 <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/environments/RoomEnvironment.js" />
 <link rel="preload" href="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/models/gltf/Xbot.glb" as="fetch" crossorigin />
-<script type="importmap">
-{ "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-} }
-</script>
 </head>
 <body>
 <div id="viewport"></div>
