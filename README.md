@@ -116,6 +116,7 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 
 ### 🎯 "Pee as a weapon" (against cartoon objects only, we have standards)
 - 💧 **Drips:** little water-drop mascots with googly eyes who wander the outdoor scenes, **run away from where you're aiming**, fill up yellow when hit and pop into a puddle. Auto-target hunts them too. Click one and it hops.
+- 🚶 **Bystanders** walk the New York, Tokyo and Paris sidewalks, the park and the grass field. They're ambience, never targets: start going and they stop, gasp, then cover their eyes ("Ew!", "Seriously?!", "Sir, this is a sidewalk") and walk off away from the splash. They coo at the beagle and laugh at the fountain instead. Click one and they wave.
 - 🖱️ **Click things:** flush the toilet, knock cans and ducks over, squish slimes, relight the campfire, wobble or rebuild the snowman
 - 🟢 **Slime target range:** creeping slimes, purple one-eyed **Gloop** monsters, tin cans, rubber ducks, traffic cones
 - 🔥 **Campfire:** put it out (sizzle + steam)
@@ -125,7 +126,7 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 - 🗽 **New York street:** brick walk-ups with fire escapes, a parked yellow cab, hydrant, trash cans
 - 🏮 **Tokyo neon alley:** neon signs, a glowing vending machine, paper lanterns (crank the power to reach them)
 - 🥐 **Paris boulevard:** Haussmann façades, café table with wine bottles, wicker chairs, a distant iron tower
-- 📟 **Y2K Japanese room:** a pastel bedroom diorama on tatami: star-and-heart wallpaper, a night-skyline window, fairy lights, a kotatsu, a beaded curtain, a candy-coloured translucent computer and a CRT with a pixel game. Knock over the lava lamp, inflatable chair, mochi-bunny plush, flip phone, pet-egg toy, CD tower, comic stack and pager. All original designs.
+- 🎀 **My sister's room:** a Y2K-style Japanese pastel bedroom diorama on tatami: star-and-heart wallpaper, a night-skyline window, fairy lights, a kotatsu, a beaded curtain, a candy-coloured translucent computer and a CRT with a pixel game. Knock over the lava lamp, inflatable chair, mochi-bunny plush, flip phone, pet-egg toy, CD tower, comic stack and pager. All original designs.
 - 🌉 **SF back alley (fog):** foggy brick alley with original graffiti tags, a fire escape, dumpsters, trash bags, boxes, bottles, an "OPEN 24H" sign, a steaming manhole and buzzing sodium lights that flicker and cut out. Hill houses and a bridge tower fade into the mist past the end wall.
 - 🚇 **Chicago underpass:** a lower-level street under a concrete deck on riveted green steel columns. An elevated train rumbles past overhead every so often, shaking dust loose.
 - 🚬 **In both alleys:** cigarette butts everywhere and a smouldering one in a standing ash can that you can put out (it relights). Rats and cockroaches scurry along the walls and **scatter away from the splash**; they're ambience, not targets. No people.
@@ -160,7 +161,7 @@ Because "why not" stopped being a question somewhere around the procedural toile
 The urine color chart is legit. The pee ball is not.
 
 **Can I pee on people?**
-No. We have a Y2K bedroom full of clutter, a beagle, a fountain statue, Drips, slimes, Gloops, rubber ducks, cones, trash cans, a cab, a campfire and a snowman. Have some self-respect.
+No. We have my sister's room full of clutter, a beagle, a fountain statue, Drips, slimes, Gloops, rubber ducks, cones, trash cans, a cab, a campfire and a snowman. Have some self-respect.
 
 **Does the toilet overflow if I don't flush?**
 Yes. Then the flood dissolves you. Flush your toilet. This is the one real life lesson in here.
