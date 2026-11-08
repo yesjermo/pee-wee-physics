@@ -1614,9 +1614,11 @@ const skeletonViz = (() => {
    They plug into the same "rig" slot as the glTF characters. Each one stands so its stream leaves along +Z
    (so aiming / auto-aim work unchanged), exposes an `exit` point for the stream, and animates itself in `tick`.
    ===================================================================== */
-function procRig(key, wrap, height, exit, tick) {
+/** opts: pivotY = height the figure spins / flips around (its own middle), noFlip = can turn but never flip or cartwheel,
+    belly = where the internal-organ labels anchor. */
+function procRig(key, wrap, height, exit, tick, opts = {}) {
   return { key, wrap, model: wrap, height, meshes: [], bones: {}, clips: [], mixer: new THREE.AnimationMixer(wrap), hips: null, head: null,
-    skel: [], hipY0: height * 0.53, proc: true, exit, tick };
+    skel: [], hipY0: height * 0.53, proc: true, exit, tick, ...opts };
 }
 const capsuleX = (r, len, mat) => { const m = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 8, 18), mat)); m.rotation.z = Math.PI / 2; return m; };
 
@@ -1687,7 +1689,8 @@ function buildBeagle(root) {
     const breathe = 1 + Math.sin(t * (state.fill > 0.85 ? 9 : 3)) * 0.015;
     saddle.scale.y = 0.85 * breathe;
   };
-  return Object.assign(procRig('beagle', wrap, 0.6, exit, tick), { viewScale: 0.5 });
+  const belly = add(new THREE.Object3D(), -0.03, 0.3, 0);
+  return procRig('beagle', wrap, 0.6, exit, tick, { viewScale: 0.5, pivotY: 0.3, belly });   // spins / flips around its own middle, not a human's hips
 }
 
 /** A bronze fountain statue on a stone pedestal, dressed in one of the costumes the famous Brussels statue is known for
@@ -1775,7 +1778,8 @@ function buildStatue(root) {
     head.rotation.z = Math.sin(t * 0.7) * 0.025;                 // the faintest bronze 'wobble' so it doesn't look frozen
     for (const a of arms) a.rotation.x = Math.sin(t * 0.9) * 0.02;
   };
-  return procRig('statue', wrap, 1.55, exit, tick);
+  const belly = add(new THREE.Object3D(), 0, 0.29, 0.03, fig);
+  return procRig('statue', wrap, 1.55, exit, tick, { noFlip: true, belly });   // a fountain turns on its base but never flips over
 }
 const _poolTint = new THREE.Color();
 const PROC_FIGURES = { beagle: buildBeagle, statue: buildStatue };
@@ -1972,6 +1976,7 @@ class HumanFigure {
     this.skin.color.copy(SKIN_TONE).lerp(urineColor, Math.max(1 - state.bodyWater, 0) * 0.35 + k * 0.65);
     this.root.scale.set(1 + 0.8 * k, Math.max(0.02, 1 - 0.98 * k), 1 + 0.8 * k);
     this.root.visible = k < 0.995;
+    if (this.rig?.noFlip && (state.flip || state.roll)) { state.flip = state.roll = 0; sim.pitchVel = 0; }
     this.pivot.rotation.set(state.flip, state.yaw, state.roll, 'YXZ');
 
     // Censor mosaic shimmer
@@ -1995,6 +2000,7 @@ class HumanFigure {
 
   /** Hip position in root space (rig bone, bounding-box estimate for custom models, or the procedural pelvis). */
   hipLocal(out) {
+    if (this.rig?.belly) { this.root.worldToLocal(this.rig.belly.getWorldPosition(out)); out.y += 0.095; return out; }   // bladder sits ~0.095 below 'hip'
     if (this.hips) return this.root.worldToLocal(this.hips.getWorldPosition(out));
     if (this.rig) return out.set(0, this.rig.height * 0.53 + this.rig.wrap.position.y, 0);
     return out.set(0, 0.97, 0);
@@ -2034,6 +2040,8 @@ class HumanFigure {
     const rig = this.rigs[key]; if (!rig) return false;
     for (const r of Object.values(this.rigs)) r.wrap.visible = r === rig;
     this.rig = rig; this.model = rig.model; this.hips = rig.hips; this.mixer = rig.mixer;
+    this.pivotY = rig.pivotY ?? PIVOT_Y;
+    this.pivot.position.y = this.pivotY; this.root.position.y = -this.pivotY;
     for (const o of this.procObjects) if (o !== this.bellyM && o !== this.face) o.visible = false;
     this.sitting = key === 'female';
     rig.ownFace = key === 'female';                               // the female keeps her own textured face
@@ -2794,7 +2802,7 @@ function applyFigure(key) {
   const go = () => {
     if (!body.activate(key)) return;
     const sit = key === 'female';
-    body.pivot.position.set(0, PIVOT_Y, sit ? TOILET_Z + 0.07 : 0);
+    body.pivot.position.set(0, body.pivotY ?? PIVOT_Y, sit ? TOILET_Z + 0.07 : 0);
     toilet.seatPivot.rotation.x = sit ? 0 : 1.6;
     if (sit) {
       if (state.scenario !== 'bathroom') { state.scenario = 'bathroom'; applyScenario('bathroom'); }
