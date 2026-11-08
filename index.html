@@ -1,358 +1,439 @@
 <!doctype html>
-<html lang="en" class="scroll-smooth">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>HydroSim 3D</title>
+<title>urinal-physics</title>
 <meta name="description" content="Interactive 3D fluid dynamics and spatial audio simulator: bladder mechanics, urine color dynamics, fluid arcs and synthesized liquid acoustics." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-<script src="https://cdn.tailwindcss.com/3.4.16"></script>
-<script>
-  tailwind.config = {
-    theme: { extend: {
-      fontFamily: { display: ['Sora', 'sans-serif'], sans: ['Inter', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
-      colors: { ink: '#06080d', panel: '#0d121c', line: 'rgba(148,170,210,0.14)', amber: '#f5c14b', aqua: '#4fd6e8' },
-    } },
-  };
-</script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;800&family=Noto+Serif+JP:wght@300;400&display=swap" rel="stylesheet" />
 <style>
-  html, body { background: #06080d; overflow-x: clip; }
-  .liquid-bg {
-    background:
-      radial-gradient(60rem 30rem at 15% -10%, rgba(79,214,232,.18), transparent 60%),
-      radial-gradient(50rem 30rem at 90% 0%, rgba(245,193,75,.16), transparent 60%),
-      radial-gradient(40rem 30rem at 50% 110%, rgba(210,60,106,.10), transparent 60%);
+  /* Same light engineering-HUD tokens as simulator.html */
+  :root { --bg: #eceef1; --card: #fbfbfc; --edge: #d4d7dc; --ink: #0d0f12; --dim: #7a808a; --lime: #d6ff3d; --lime-ink: #1a2200; --lime-edge: #9cc11a; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 Inter, system-ui, sans-serif; overflow-x: clip; }
+  a { color: inherit; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 16px; }
+
+  /* ---------- top bar ---------- */
+  #top { position: sticky; top: 0; z-index: 20; height: 48px; display: flex; align-items: stretch; background: rgba(251,251,252,.96); border-bottom: 1px solid var(--edge); backdrop-filter: blur(8px); font-family: 'JetBrains Mono', monospace; }
+  #top .logo { width: 48px; display: grid; place-items: center; background: var(--ink); color: var(--lime); font-weight: 800; font-size: 12px; text-decoration: none; }
+  #top .ttl { padding: 0 16px; border-right: 1px solid var(--edge); display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+  #top .ttl small { font-size: 8.5px; letter-spacing: .14em; color: var(--dim); text-transform: uppercase; }
+  #top .ttl b { font: 700 15px Inter, sans-serif; display: flex; align-items: center; gap: 7px; }
+  #top .ttl b i { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--ink); background: var(--lime); }
+  #top nav { display: flex; align-items: center; gap: 2px; padding: 0 10px; }
+  #top nav a { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; text-decoration: none; padding: 6px 10px; border-radius: 4px; color: var(--dim); }
+  #top nav a:hover { color: var(--ink); background: #eef0f2; }
+  #top .grow { flex: 1; }
+  #top .fld { padding: 0 14px; border-left: 1px solid var(--edge); display: flex; flex-direction: column; justify-content: center; gap: 3px; min-width: 100px; }
+  #top .fld small { font-size: 8px; letter-spacing: .14em; color: var(--dim); text-transform: uppercase; }
+  #top .fld b { font-size: 11px; text-transform: uppercase; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #c3c7cd; display: inline-block; }
+  .dot.on { background: #8bc400; box-shadow: 0 0 0 3px rgba(214,255,61,.65); }
+  #top .cta { display: flex; align-items: center; padding: 0 12px; border-left: 1px solid var(--edge); }
+
+  /* ---------- shared bits ---------- */
+  .card { background: var(--card); border: 1px solid var(--edge); border-radius: 6px; padding: 14px 16px; box-shadow: 0 12px 28px -24px rgba(20,25,35,.4); }
+  .h { display: flex; align-items: center; gap: 8px; font: 600 10px 'JetBrains Mono', monospace; letter-spacing: .14em; text-transform: uppercase; margin: 0 0 12px; }
+  .h::before { content: ''; width: 8px; height: 8px; border: 1.5px solid var(--ink); border-radius: 1px; }
+  .h .idx { margin-left: auto; color: var(--dim); font-weight: 400; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; font: 600 10.5px 'JetBrains Mono', monospace; letter-spacing: .1em; text-transform: uppercase; padding: 10px 14px; border-radius: 4px; border: 1px solid var(--edge); background: #fff; color: var(--ink); cursor: pointer; text-decoration: none; }
+  .btn:hover { border-color: var(--ink); }
+  .btn.lime { background: var(--lime); border-color: var(--lime-edge); color: var(--lime-ink); }
+  .btn.ink { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .btn.sm { padding: 6px 9px; font-size: 9.5px; }
+  .btn.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .tag { display: inline-block; font: 600 9px 'JetBrains Mono', monospace; letter-spacing: .12em; text-transform: uppercase; padding: 3px 7px; border: 1px solid var(--ink); border-radius: 2px; }
+  .tag.lime { background: var(--lime); border-color: var(--lime-edge); }
+  label.lbl { display: flex; justify-content: space-between; font: 500 9.5px 'JetBrains Mono', monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin: 10px 0 4px; }
+  label.lbl span { color: var(--ink); }
+  input[type=range] { width: 100%; accent-color: var(--ink); }
+  select { width: 100%; background: #fff; border: 1px solid var(--edge); border-radius: 4px; padding: 7px 8px; font: 500 12px Inter, sans-serif; color: var(--ink); }
+  .seg { display: flex; flex-wrap: wrap; gap: 5px; }
+  .bar { height: 7px; background: #e5e7ea; position: relative; } .bar i { position: absolute; inset: 0 auto 0 0; background: var(--ink); width: 0; transition: width .15s; }
+  .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; font: 500 9.5px 'JetBrains Mono', monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+
+  /* ---------- hero ---------- */
+  .hero { display: grid; grid-template-columns: 340px 1fr; gap: 12px; padding: 16px 0 12px; }
+  .hero .intro { display: flex; flex-direction: column; gap: 12px; }
+  .kicker { font: 600 9.5px 'JetBrains Mono', monospace; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+  h1 { font: 800 34px/1.04 Inter, sans-serif; letter-spacing: -.02em; margin: 6px 0 10px; }
+  h1 mark { background: var(--lime); padding: 0 6px; border: 1.5px solid var(--ink); border-radius: 3px; color: var(--lime-ink); }
+  .lede { color: #3d424b; margin: 0 0 14px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { background: #fff; border: 1px solid var(--edge); border-radius: 4px; padding: 8px 10px; font-family: 'JetBrains Mono', monospace; }
+  .stat small { display: block; font-size: 8px; letter-spacing: .14em; color: var(--dim); }
+  .stat b { font: 800 22px/1.1 Inter, sans-serif; letter-spacing: -.01em; }
+  .stat b em { font: 600 9px 'JetBrains Mono', monospace; color: var(--dim); font-style: normal; margin-left: 3px; }
+  .viewport { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .viewport .bar-top { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--edge); font: 600 9.5px 'JetBrains Mono', monospace; letter-spacing: .12em; text-transform: uppercase; }
+  .viewport .bar-top span:last-child { margin-left: auto; color: var(--dim); font-weight: 400; display: flex; align-items: center; gap: 6px; }
+  #sim { display: block; width: 100%; height: min(72vh, 680px); min-height: 460px; border: 0; background: #e4e6e9; }
+  .viewport .strip { display: grid; grid-template-columns: 1fr 280px; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--edge); align-items: center; }
+  #wave { width: 100%; height: 54px; display: block; }
+  .status-chip { font-family: 'JetBrains Mono', monospace; }
+  .status-chip small { display: block; font-size: 8.5px; letter-spacing: .14em; color: var(--dim); margin-bottom: 4px; }
+  .status-chip b { display: inline-block; font: 800 20px/1.1 Inter, sans-serif; padding: 3px 10px; background: var(--lime); color: var(--lime-ink); border: 1.5px solid var(--ink); border-radius: 3px; }
+  .status-chip span { display: block; font-size: 9px; letter-spacing: .1em; margin-top: 5px; text-transform: uppercase; }
+
+  /* ---------- features / controls ---------- */
+  section.block { padding: 18px 0; }
+  .sec-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin: 0 0 12px; }
+  .sec-head h2 { font: 800 26px/1.1 Inter, sans-serif; letter-spacing: -.015em; margin: 4px 0 0; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .feat p { color: #3d424b; margin: 0 0 12px; font-size: 13.5px; }
+  .feat ul { margin: 0; padding: 0; list-style: none; font: 500 10px 'JetBrains Mono', monospace; color: var(--dim); letter-spacing: .04em; }
+  .feat li { padding: 5px 0; border-top: 1px dashed var(--edge); }
+  .spectrum { height: 10px; border-radius: 2px; border: 1px solid var(--edge); background: linear-gradient(90deg, #f6f1c2, #f0b84a, #dcff1a, #d23c6a, #ff9124, #38c7a0, #6b3a12); }
+  .chips { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .chip { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 2px; border: 1px solid var(--edge); border-radius: 4px; background: #fff; cursor: pointer; font: 500 9.5px Inter, sans-serif; }
+  .chip:hover { border-color: var(--ink); } .chip em { font-style: normal; font-size: 17px; }
+  .meter-row { display: flex; justify-content: space-between; font: 500 9.5px 'JetBrains Mono', monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin: 10px 0 4px; }
+  .meter-row b { color: var(--ink); }
+  footer { border-top: 1px solid var(--edge); margin-top: 18px; padding: 18px 0 28px; font: 500 10px 'JetBrains Mono', monospace; letter-spacing: .06em; color: var(--dim); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+  /* ---------- splash: hazy green field + net-board text ---------- */
+  #splash { position: fixed; inset: 0; z-index: 100; background: #dfeee6; overflow: hidden; transition: opacity 1.2s ease, filter 1.2s ease; cursor: pointer; }
+  #splash.out { opacity: 0; filter: blur(14px) brightness(1.3); pointer-events: none; }
+  #field { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #splash .haze { position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(120% 70% at 70% 0%, rgba(255,255,255,.85), rgba(255,255,255,0) 60%),
+                linear-gradient(180deg, rgba(240,248,245,.25), rgba(240,248,245,0) 40%, rgba(20,40,20,.18)); mix-blend-mode: screen; }
+  #splash .grain { position: absolute; inset: -50%; pointer-events: none; opacity: .09; animation: grain 1s steps(6) infinite;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+  @keyframes grain { 0% { transform: translate(0,0) } 25% { transform: translate(-3%,2%) } 50% { transform: translate(2%,-3%) } 75% { transform: translate(-2%,-1%) } 100% { transform: translate(1%,3%) } }
+  #splash .copy { position: absolute; left: 7vw; top: 12vh; max-width: min(560px, 86vw); color: #2f5a3a; text-shadow: 0 0 18px rgba(255,255,255,.9), 0 0 2px rgba(255,255,255,.8); }
+  #splash .jp { font: 300 clamp(40px, 8vw, 86px)/1 'Noto Serif JP', serif; letter-spacing: .08em; opacity: 0; animation: rise 2.4s ease .3s forwards; }
+  #splash .en { font: 400 12px 'JetBrains Mono', monospace; letter-spacing: .5em; text-transform: lowercase; margin-top: 14px; opacity: 0; animation: rise 2.4s ease .9s forwards; }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); filter: blur(6px); } to { opacity: .95; transform: none; filter: none; } }
+  #board { position: absolute; right: 6vw; bottom: 12vh; width: min(470px, 88vw); font: 400 12px/1.75 'JetBrains Mono', monospace; color: #fff; text-shadow: 0 1px 8px rgba(10,40,20,.8); background: rgba(20,45,25,.28); padding: 12px 14px; border-radius: 6px; backdrop-filter: blur(3px); }
+  #board .ln { white-space: pre-wrap; opacity: .92; }
+  #board .ln b { font-weight: 400; color: #e6ffb0; }
+  #board .ln u { text-decoration: none; opacity: .6; }
+  #board .caret { display: inline-block; width: 7px; height: 13px; background: #fff; vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  #enter { position: absolute; left: 7vw; bottom: 12vh; font: 400 11px 'JetBrains Mono', monospace; letter-spacing: .4em; color: #fff; background: rgba(20,45,25,.45); border: 1px solid rgba(255,255,255,.75); padding: 12px 22px; border-radius: 999px; cursor: pointer; backdrop-filter: blur(4px); opacity: 0; animation: rise 1.6s ease 2.2s forwards; }
+  #enter:hover { background: rgba(255,255,255,.25); }
+  #splash .hint { position: absolute; left: 50%; bottom: 3vh; transform: translateX(-50%); font: 400 9px 'JetBrains Mono', monospace; letter-spacing: .3em; color: rgba(255,255,255,.75); }
+
+  @media (max-width: 960px) {
+    .hero { grid-template-columns: 1fr; }
+    .grid3, .grid4 { grid-template-columns: 1fr 1fr; }
+    #top nav, #top .fld.opt { display: none; }
+    .viewport .strip { grid-template-columns: 1fr; }
   }
-  .grad-text { background: linear-gradient(100deg, #f6f1c2 0%, #f5c14b 35%, #4fd6e8 75%); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .glow-frame { position: relative; border-radius: 1.25rem; }
-  .glow-frame::before { content: ''; position: absolute; inset: -1px; border-radius: inherit; padding: 1px;
-    background: linear-gradient(135deg, rgba(245,193,75,.7), rgba(79,214,232,.5) 50%, rgba(210,60,106,.5));
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
-  .glow-frame::after { content: ''; position: absolute; inset: 10% 5% -8%; z-index: -1; filter: blur(60px);
-    background: linear-gradient(90deg, rgba(79,214,232,.25), rgba(245,193,75,.25)); }
-  .blob { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .45; animation: drift 18s ease-in-out infinite alternate; pointer-events: none; }
-  @keyframes drift { to { transform: translate(40px, 30px) scale(1.1); } }
-  input[type=range] { accent-color: #f5c14b; }
-  .seg button[aria-pressed=true] { background: linear-gradient(135deg, #f5c14b, #e2902a); color: #1a1205; }
-  .switch[aria-checked=true] { background: #4fd6e8; }
-  .switch[aria-checked=true] span { transform: translateX(20px); }
-  .chip[aria-pressed=true] { outline: 2px solid #fff; outline-offset: 2px; }
-  @media (prefers-reduced-motion: reduce) { .blob { animation: none; } }
+  @media (max-width: 620px) {
+    .grid3, .grid4 { grid-template-columns: 1fr; }
+    h1 { font-size: 28px; }
+    #top .ttl small { display: none; }
+    #board { bottom: 22vh; }
+  }
+  @media (prefers-reduced-motion: reduce) { #splash .grain, #board .caret { animation: none; } }
 </style>
 </head>
-<body class="text-slate-200 font-sans antialiased liquid-bg min-h-screen overflow-x-hidden">
+<body>
 
-<!-- ================= NAV ================= -->
-<header class="sticky top-0 z-30 backdrop-blur-md bg-ink/60 border-b border-line">
-  <nav class="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-    <a href="#" class="flex items-center gap-2 font-display font-bold text-white">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2.5c3.5 4.6 6.5 8.3 6.5 12a6.5 6.5 0 0 1-13 0c0-3.7 3-7.4 6.5-12Z" fill="url(#g)"/><defs><linearGradient id="g" x1="5" y1="3" x2="19" y2="21"><stop stop-color="#4fd6e8"/><stop offset="1" stop-color="#f5c14b"/></linearGradient></defs></svg>
-      HydroSim<span class="text-amber">3D</span>
-    </a>
-    <div class="hidden sm:flex items-center gap-7 text-sm text-slate-400">
-      <a href="#features" class="hover:text-white transition">Features</a>
-      <a href="#controls" class="hover:text-white transition">Controls</a>
-      <a href="#spectrum" class="hover:text-white transition">Color spectrum</a>
-    </div>
-    <a href="simulator.html" class="text-sm font-semibold px-4 py-2 rounded-lg bg-white/5 border border-line hover:border-amber/60 hover:text-amber transition">Open full simulator ↗</a>
-  </nav>
+<!-- ===================== SPLASH ===================== -->
+<div id="splash" role="dialog" aria-label="Intro">
+  <canvas id="field"></canvas>
+  <div class="haze"></div>
+  <div class="grain"></div>
+  <div class="copy">
+    <div class="jp">水のエーテル</div>
+    <div class="en">the ether of water · urinal-physics</div>
+  </div>
+  <div id="board" aria-live="polite"></div>
+  <button id="enter">enter ▸</button>
+  <div class="hint">click anywhere · or press any key</div>
+</div>
+
+<!-- ===================== TOP BAR ===================== -->
+<header id="top">
+  <a class="logo" href="#">UP</a>
+  <div class="ttl"><small>HydroSim 3D · bladder &amp; acoustics simulator</small><b>urinal-physics <i></i></b></div>
+  <nav><a href="#rig">Live rig</a><a href="#features">Features</a><a href="#controls">Controls</a><a href="#spectrum">Spectrum</a></nav>
+  <div class="grow"></div>
+  <div class="fld opt"><small>Scenario</small><b id="tScene">BATHROOM</b></div>
+  <div class="fld"><small>Status</small><b><span class="dot" id="tDot"></span><span id="tStatus">STANDBY</span></b></div>
+  <div class="cta"><a class="btn sm ink" href="simulator.html">Open simulator ↗</a></div>
 </header>
 
-<!-- ================= HERO ================= -->
-<section class="relative max-w-7xl mx-auto px-4 sm:px-6 pt-14 sm:pt-20 pb-16">
-  <div class="blob w-72 h-72 bg-aqua/40 -left-20 top-10"></div>
-  <div class="blob w-80 h-80 bg-amber/30 right-0 top-40" style="animation-delay:-6s"></div>
-
-  <div class="relative text-center max-w-4xl mx-auto">
-    <span class="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-[.18em] text-aqua/90 px-3 py-1 rounded-full border border-aqua/30 bg-aqua/5">
-      <span class="w-1.5 h-1.5 rounded-full bg-aqua animate-pulse"></span> Three.js · Web Audio · WebGL
-    </span>
-    <h1 class="mt-6 font-display font-extrabold text-4xl sm:text-6xl leading-[1.05] tracking-tight text-white">
-      Interactive 3D <span class="grad-text">Fluid Dynamics</span> &amp; Spatial Audio Simulator
-    </h1>
-    <p class="mt-5 text-base sm:text-lg text-slate-400 max-w-2xl mx-auto">
-      Explore real-time bladder mechanics, urine color dynamics, fluid arcs, and synthesized liquid acoustics in 3D.
-    </p>
-    <div class="mt-8 flex flex-wrap justify-center gap-3">
-      <button id="heroPlay" class="px-5 py-3 rounded-xl font-semibold text-[#1a1205] bg-gradient-to-br from-amber to-[#e2902a] shadow-[0_10px_40px_-10px_rgba(245,193,75,.7)] hover:brightness-110 transition">▶ Start stream with sound</button>
-      <a href="#controls" class="px-5 py-3 rounded-xl font-semibold border border-line bg-white/5 hover:bg-white/10 transition">Try the controls</a>
-    </div>
-  </div>
-
-  <!-- Viewport -->
-  <div class="relative mt-12 glow-frame bg-panel">
-    <div class="rounded-[1.2rem] overflow-hidden">
-      <div class="flex items-center justify-between px-4 h-10 border-b border-line bg-black/30 text-xs font-mono text-slate-500">
-        <div class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-full bg-[#ff5d6c]/70"></i><i class="w-2.5 h-2.5 rounded-full bg-amber/70"></i><i class="w-2.5 h-2.5 rounded-full bg-aqua/70"></i></div>
-        <span class="hidden sm:inline">hydrosim://live-viewport · drag to orbit · scroll to zoom</span>
-        <span id="liveBadge" class="text-slate-500">● idle</span>
-      </div>
-      <iframe id="sim" src="simulator.html?embed" title="3D hydration and fluid simulator" allow="autoplay"
-        class="block w-full h-[60vh] min-h-[420px] max-h-[680px] bg-black"></iframe>
-      <!-- Live audio visualizer + readouts, fed by postMessage telemetry -->
-      <div class="grid md:grid-cols-[1fr_auto] gap-4 p-4 border-t border-line bg-black/30">
-        <canvas id="wave" class="w-full h-20 rounded-lg bg-[#0a101b] border border-line"></canvas>
-        <div class="grid grid-cols-4 md:grid-cols-2 gap-2 text-center md:min-w-[260px]">
-          <div class="rounded-lg border border-line bg-[#0a101b] px-2 py-1.5"><div class="text-[10px] uppercase tracking-wider text-slate-500">Bladder</div><div id="rFill" class="font-mono text-sm text-white">—</div></div>
-          <div class="rounded-lg border border-line bg-[#0a101b] px-2 py-1.5"><div class="text-[10px] uppercase tracking-wider text-slate-500">Pressure</div><div id="rPres" class="font-mono text-sm text-white">—</div></div>
-          <div class="rounded-lg border border-line bg-[#0a101b] px-2 py-1.5"><div class="text-[10px] uppercase tracking-wider text-slate-500">Flow</div><div id="rFlow" class="font-mono text-sm text-white">—</div></div>
-          <div class="rounded-lg border border-line bg-[#0a101b] px-2 py-1.5"><div class="text-[10px] uppercase tracking-wider text-slate-500">Hue</div><div class="font-mono text-sm text-white flex items-center justify-center gap-1.5"><i id="rDot" class="w-3 h-3 rounded-full inline-block shrink-0"></i><span id="rHex">—</span></div></div>
+<main class="wrap">
+  <!-- ===================== HERO ===================== -->
+  <section class="hero" id="rig">
+    <div class="intro">
+      <div class="card">
+        <div class="h">HydroSim UX-1 <span class="idx">01</span></div>
+        <div class="kicker">Three.js · Web Audio · WebGL</div>
+        <h1>Interactive 3D <mark>fluid dynamics</mark> &amp; spatial audio simulator</h1>
+        <p class="lede">Explore real-time bladder mechanics, urine color dynamics, fluid arcs and synthesized liquid acoustics in 3D.</p>
+        <div class="seg">
+          <button class="btn lime" id="heroPlay">▶ Start stream with sound</button>
+          <a class="btn" href="simulator.html">Full screen</a>
         </div>
+      </div>
+      <div class="card">
+        <div class="h">Live telemetry <span class="idx">02</span></div>
+        <div class="stats">
+          <div class="stat"><small>BLADDER</small><b id="rFill">—<em>ML</em></b></div>
+          <div class="stat"><small>PRESSURE</small><b id="rPres">—<em>CMH₂O</em></b></div>
+          <div class="stat"><small>FLOW</small><b id="rFlow">—<em>ML/S</em></b></div>
+          <div class="stat"><small>HUE</small><b style="display:flex;align-items:center;gap:6px"><i id="rDot" style="width:14px;height:14px;border-radius:50%;border:1px solid var(--ink);background:#f0b84a"></i><span id="rHex" class="mono" style="font-size:12px">—</span></b></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="h">Scenario · location <span class="idx">03</span></div>
+        <select id="sceneSel" aria-label="Scenario">
+          <option value="bathroom">🚽 Bathroom</option><option value="park">🌳 City park</option><option value="campfire">🔥 Campfire</option>
+          <option value="snow">❄️ Snow field</option><option value="range">🟢 Slime target range</option><option value="nyc">🗽 New York street</option>
+          <option value="tokyo">🏮 Tokyo neon alley</option><option value="paris">🥐 Paris boulevard</option>
+        </select>
+        <p class="lede" style="margin:10px 0 0;font-size:12.5px">Also in the simulator: the <b>Scenario</b> picker in the top bar, or the <b>Scenario &amp; pose</b> card on the right.</p>
       </div>
     </div>
-  </div>
-</section>
 
-<!-- ================= FEATURES ================= -->
-<section id="features" class="max-w-7xl mx-auto px-4 sm:px-6 py-16">
-  <div class="max-w-2xl">
-    <p class="font-mono text-xs uppercase tracking-[.18em] text-amber">What's inside</p>
-    <h2 class="mt-3 font-display font-bold text-3xl sm:text-4xl text-white">Physics, physiology and procedural sound in one viewport</h2>
-  </div>
-  <div class="mt-10 grid md:grid-cols-3 gap-5">
-    <article class="group rounded-2xl border border-line bg-panel/80 p-6 hover:border-aqua/40 transition">
-      <div class="w-11 h-11 rounded-xl grid place-items-center bg-aqua/10 text-aqua">
-        <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>
-      </div>
-      <h3 class="mt-5 font-display font-semibold text-lg text-white">360° Spatial Audio &amp; Surface Acoustics</h3>
-      <p class="mt-2 text-sm text-slate-400 leading-relaxed">Procedurally generated fluid stream audio and dynamic splash impact sounds tied to camera orientation. Pink noise, band-pass filters and LFOs run through HRTF panners anchored to the exit point and impact zone.</p>
-      <ul class="mt-4 space-y-1.5 text-xs font-mono text-slate-500">
-        <li>→ Zero audio files: 100% synthesized</li><li>→ Ceramic tap · water plink · tile patter</li>
-      </ul>
-    </article>
-    <article class="group rounded-2xl border border-line bg-panel/80 p-6 hover:border-amber/40 transition">
-      <div class="w-11 h-11 rounded-xl grid place-items-center bg-amber/10 text-amber">
-        <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="13" r="6"/><path d="M12 7V3M9 3h6M3 20c3-2 6-2 9 0s6 2 9 0"/></svg>
-      </div>
-      <h3 class="mt-5 font-display font-semibold text-lg text-white">Dynamic Morphing &amp; Bladder Volume</h3>
-      <p class="mt-2 text-sm text-slate-400 leading-relaxed">Scale belly size, adjust water intake, and watch pressure drive stream trajectory and audio pitch. Bladder radius follows real volume (up to 500 mL) and flow peaks near a typical 24 mL/s.</p>
-      <ul class="mt-4 space-y-1.5 text-xs font-mono text-slate-500">
-        <li>→ Detrusor pressure in cmH₂O</li><li>→ Ballistic auto-aim at slimes, cans &amp; fire</li><li>→ Overdrive until you melt into a pee ball</li>
-      </ul>
-    </article>
-    <article class="group rounded-2xl border border-line bg-panel/80 p-6 hover:border-[#d23c6a]/50 transition">
-      <div class="w-11 h-11 rounded-xl grid place-items-center bg-[#d23c6a]/10 text-[#ff7aa0]">
-        <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-1.7-1.3-3-3-3h-2a2 2 0 0 1-2-2V5c0-1.1-.9-2-2-2Z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/></svg>
-      </div>
-      <h3 class="mt-5 font-display font-semibold text-lg text-white">Substance &amp; Color Spectrum</h3>
-      <p class="mt-2 text-sm text-slate-400 leading-relaxed">Real-time visual shading driven by simulated intake (Water, B-Vitamins, Beets, Dehydration). One shader uniform tints the stream, splash droplets, bladder contents and the bowl water.</p>
-      <div class="mt-4 h-2.5 rounded-full" style="background:linear-gradient(90deg,#f6f1c2,#f0b84a,#dcff1a,#d23c6a,#7a3f0e)"></div>
-    </article>
-  </div>
-</section>
-
-<!-- ================= CONTROL SHOWCASE ================= -->
-<section id="controls" class="max-w-7xl mx-auto px-4 sm:px-6 py-16">
-  <div class="grid lg:grid-cols-[1fr_1.1fr] gap-10 items-start">
-    <div class="lg:sticky lg:top-24">
-      <p class="font-mono text-xs uppercase tracking-[.18em] text-aqua">Sound &amp; physics controls</p>
-      <h2 class="mt-3 font-display font-bold text-3xl sm:text-4xl text-white">These controls drive the live viewport</h2>
-      <p class="mt-4 text-slate-400 leading-relaxed">Every switch below talks to the 3D scene above over <code class="font-mono text-amber text-sm">postMessage</code>. Change the surface and the splash timbre changes; raise water intake and the hue pales while the bladder fills faster.</p>
-      <ol class="mt-6 space-y-3 text-sm text-slate-400">
-        <li class="flex gap-3"><span class="font-mono text-amber">01</span> Pink-noise source → band-pass filter, its frequency swept by an LFO</li>
-        <li class="flex gap-3"><span class="font-mono text-amber">02</span> Gain, cutoff and playback rate scale with bladder pressure</li>
-        <li class="flex gap-3"><span class="font-mono text-amber">03</span> Particle collisions trigger per-surface impact voices</li>
-        <li class="flex gap-3"><span class="font-mono text-amber">04</span> Both emitters are PositionalAudio nodes on the camera's listener</li>
-      </ol>
-      <button onclick="document.getElementById('sim').scrollIntoView({behavior:'smooth',block:'center'})" class="mt-6 text-sm text-aqua hover:underline">↑ Watch the viewport while you tweak</button>
-    </div>
-
-    <div class="rounded-2xl border border-line bg-panel/90 p-5 sm:p-6 space-y-6 shadow-2xl shadow-black/40">
-      <!-- Audio -->
-      <div>
-        <div class="flex items-center justify-between">
-          <h3 class="font-display font-semibold text-white">Audio</h3>
-          <button id="cMute" class="text-xs font-mono px-3 py-1.5 rounded-lg border border-line bg-white/5 hover:border-amber/50">🔇 Muted</button>
-        </div>
-        <label class="mt-4 flex justify-between text-sm text-slate-400">Master volume <span id="cVolV" class="font-mono text-amber">70%</span></label>
-        <input id="cVol" type="range" min="0" max="1" step="0.01" value="0.7" class="w-full mt-1">
-        <div class="mt-4 flex items-center justify-between">
-          <div><div class="text-sm text-slate-300">Spatial audio (HRTF)</div><div class="text-xs text-slate-500">Orbit the camera to hear the stream pan</div></div>
-          <button id="cSpatial" role="switch" aria-checked="true" class="switch relative w-11 h-6 rounded-full bg-slate-700 transition"><span class="absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white transition"></span></button>
-        </div>
-      </div>
-
-      <!-- Surface -->
-      <div>
-        <h3 class="font-display font-semibold text-white">Surface material</h3>
-        <div id="cSurface" class="seg mt-3 grid grid-cols-3 gap-1 p-1 rounded-xl bg-black/40 border border-line text-sm">
-          <button data-v="ceramic" aria-pressed="false" class="py-2 rounded-lg transition hover:bg-white/5">Ceramic Tap</button>
-          <button data-v="water" aria-pressed="true" class="py-2 rounded-lg transition hover:bg-white/5">Liquid Splash</button>
-          <button data-v="floor" aria-pressed="false" class="py-2 rounded-lg transition hover:bg-white/5">Flat Floor</button>
-        </div>
-        <label class="mt-4 flex justify-between text-sm text-slate-400">Impact resonant pitch <span id="cPitchV" class="font-mono text-amber">1.00×</span></label>
-        <input id="cPitch" type="range" min="0.5" max="2" step="0.01" value="1" class="w-full mt-1">
-      </div>
-
-      <!-- Hydration -->
-      <div id="spectrum">
-        <div class="flex items-center justify-between">
-          <h3 class="font-display font-semibold text-white">Hydration &amp; color</h3>
-          <span class="flex items-center gap-2 text-xs font-mono text-slate-400"><i id="cDot" class="w-4 h-4 rounded-full border border-white/20"></i><span id="cHex">#f0b84a</span></span>
-        </div>
-        <label class="mt-3 flex justify-between text-sm text-slate-400">Water intake <span id="cHydV" class="font-mono text-amber">2.1 L/day</span></label>
-        <input id="cHyd" type="range" min="0" max="1" step="0.01" value="0.6" class="w-full mt-1">
-        <div class="mt-4 grid grid-cols-5 gap-2" id="cChips"></div>
-        <p id="cNote" class="mt-3 text-xs text-slate-500 min-h-[2.5rem]">Auto: color follows water intake. Pick a swatch to simulate a substance.</p>
-      </div>
-
-      <!-- Scenario & weapon mode -->
-      <div>
-        <h3 class="font-display font-semibold text-white">Scenario</h3>
-        <div id="cScenario" class="seg mt-3 grid grid-cols-2 sm:grid-cols-3 gap-1 p-1 rounded-xl bg-black/40 border border-line text-sm">
-          <button data-v="bathroom" aria-pressed="true" class="py-2 rounded-lg transition hover:bg-white/5">🚽 Bathroom</button>
-          <button data-v="park" aria-pressed="false" class="py-2 rounded-lg transition hover:bg-white/5">🌳 Park</button>
-          <button data-v="campfire" aria-pressed="false" class="py-2 rounded-lg transition hover:bg-white/5">🔥 Campfire</button>
-          <button data-v="snow" aria-pressed="false" class="py-2 rounded-lg transition hover:bg-white/5">❄️ Snowman</button>
-          <button data-v="range" aria-pressed="false" class="py-2 rounded-lg transition hover:bg-white/5">🟢 Slime range</button>
-        </div>
-        <div class="mt-4 flex items-center justify-between">
-          <div><div class="text-sm text-slate-300">Auto-spin 360°</div><div class="text-xs text-slate-500">Rotate the body to spray every direction</div></div>
-          <button id="cSpin" role="switch" aria-checked="false" class="switch relative w-11 h-6 rounded-full bg-slate-700 transition"><span class="absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white transition"></span></button>
-        </div>
-        <div class="mt-4 rounded-xl border border-[#ff5d6c]/30 bg-[#ff5d6c]/5 p-3">
-          <div class="flex items-center justify-between gap-3">
-            <div><div class="text-sm text-white font-semibold">⚡ Overdrive</div><div class="text-xs text-slate-400">Unlimited bladder, 1.8× pressure. Drains body water until you become a pee ball.</div></div>
-            <button id="cOver" class="shrink-0 text-xs font-semibold px-3 py-2 rounded-lg bg-gradient-to-br from-[#ff5d6c] to-[#c2304a] text-white">Engage</button>
-          </div>
-          <div class="mt-3 h-2 rounded-full bg-black/40 overflow-hidden"><i id="cBody" class="block h-full w-full bg-gradient-to-r from-[#ff5d6c] via-amber to-aqua transition-[width]"></i></div>
-          <div class="mt-1.5 flex justify-between text-[11px] font-mono text-slate-500"><span>Body water <b id="cBodyV" class="text-slate-300">100%</b></span><span id="cScore">0 hits · 0 down</span></div>
-        </div>
-      </div>
-
-      <!-- Stream & camera -->
-      <div class="grid sm:grid-cols-2 gap-3">
-        <button id="cFlow" class="py-3 rounded-xl font-semibold text-[#1a1205] bg-gradient-to-br from-amber to-[#e2902a] hover:brightness-110 transition">Release stream</button>
-        <button id="cFlush" class="py-3 rounded-xl font-semibold border border-line bg-white/5 hover:bg-white/10 transition">🚽 Flush</button>
-      </div>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs" id="cViews">
-        <button data-view="side" class="py-2 rounded-lg border border-line bg-white/5 hover:border-aqua/50">Side</button>
-        <button data-view="top" class="py-2 rounded-lg border border-line bg-white/5 hover:border-aqua/50">Top</button>
-        <button data-view="macro" class="py-2 rounded-lg border border-line bg-white/5 hover:border-aqua/50">Macro stream</button>
-        <button data-view="cross" class="py-2 rounded-lg border border-line bg-white/5 hover:border-aqua/50">Cross-section</button>
+    <div class="card viewport">
+      <div class="bar-top"><span>Live viewport · drag body to spin · drag scene to orbit</span><span><span class="dot" id="vDot"></span><span id="vState">idle</span></span></div>
+      <iframe id="sim" src="simulator.html?embed" title="3D hydration and fluid simulator" allow="autoplay"></iframe>
+      <div class="strip">
+        <canvas id="wave"></canvas>
+        <div class="status-chip"><small>MODE · SYSTEM STATE</small><b id="chip">STANDBY</b><span id="chipSub">waiting for operator</span></div>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ================= FOOTER ================= -->
-<footer class="border-t border-line mt-10">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-10 flex flex-col sm:flex-row gap-4 justify-between text-sm text-slate-500">
-    <p>HydroSim 3D, an educational toy. The color chart is general information, not a diagnosis: see a doctor for persistent red, brown or cloudy urine.</p>
-    <a href="simulator.html" class="text-amber hover:underline shrink-0">Launch full-screen simulator →</a>
-  </div>
-</footer>
+  <!-- ===================== FEATURES ===================== -->
+  <section class="block" id="features">
+    <div class="sec-head"><div><div class="kicker">What's inside</div><h2>Physics, physiology and procedural sound in one viewport</h2></div></div>
+    <div class="grid4">
+      <article class="card feat"><div class="h">Spatial audio <span class="idx">01</span></div>
+        <p>Pink noise, band-pass filters and LFOs build the stream sound live. Impact voices fire from real particle collisions, panned through HRTF.</p>
+        <ul><li>0 audio files, 100% synthesized</li><li>ceramic tap · water plink · tile patter · sizzle</li></ul></article>
+      <article class="card feat"><div class="h">Bladder physics <span class="idx">02</span></div>
+        <p>Kidneys fill a 500 mL bladder. Pressure drives flow, exit speed and the ballistic arc. Don't flush and the bowl overflows.</p>
+        <ul><li>detrusor pressure in cmH₂O</li><li>auto-aim solves the ballistic angle</li></ul></article>
+      <article class="card feat"><div class="h">Color spectrum <span class="idx">03</span></div>
+        <p>15 foods and drinks shift hydration and pigment. One shader tints the stream, the splashes, the bowl water and the porcelain.</p>
+        <div class="spectrum"></div></article>
+      <article class="card feat"><div class="h">Scenarios <span class="idx">04</span></div>
+        <p>Bathroom, park, campfire, snowman, slime range, and three city streets with their own targets.</p>
+        <ul><li>🗽 new york · 🏮 tokyo · 🥐 paris</li><li>cartoon guy · sculpt · skeleton skins</li></ul></article>
+    </div>
+  </section>
+
+  <!-- ===================== CONTROLS ===================== -->
+  <section class="block" id="controls">
+    <div class="sec-head"><div><div class="kicker">Sound &amp; physics controls</div><h2>These cards drive the live viewport</h2></div>
+      <a class="btn sm" href="#rig">↑ Watch the viewport</a></div>
+    <div class="grid3">
+      <div class="card">
+        <div class="h">Acoustics <span class="idx">01</span></div>
+        <button class="btn sm" id="cMute">🔇 Muted</button>
+        <label class="lbl">Master volume <span id="cVolV">70%</span></label>
+        <input id="cVol" type="range" min="0" max="1" step="0.01" value="0.7">
+        <label class="lbl">Impact resonant pitch <span id="cPitchV">1.00×</span></label>
+        <input id="cPitch" type="range" min="0.5" max="2" step="0.01" value="1">
+        <div class="switch">Spatial audio (HRTF) <button class="btn sm on" id="cSpatial">On</button></div>
+        <label class="lbl">Toilet surface</label>
+        <div class="seg" id="cSurface"><button class="btn sm" data-v="ceramic">Ceramic tap</button><button class="btn sm on" data-v="water">Water splash</button><button class="btn sm" data-v="floor">Floor</button></div>
+      </div>
+      <div class="card">
+        <div class="h">Character &amp; display <span class="idx">02</span></div>
+        <label class="lbl" style="margin-top:0">Skin / costume</label>
+        <select id="cSkin"><option value="cartoon">Cartoon guy</option><option value="sculpt">Anatomy sculpt</option><option value="skin">Skin tone</option><option value="skeleton">Skeleton</option><option value="gold">Gold statue</option><option value="chrome">Chrome</option><option value="gloop">Gloop costume</option></select>
+        <label class="lbl">Camera</label>
+        <div class="seg" id="cViews"><button class="btn sm" data-view="side">Side</button><button class="btn sm" data-view="top">Top</button><button class="btn sm" data-view="macro">Macro</button><button class="btn sm" data-view="cross">X-sect</button><button class="btn sm" data-view="wide">Wide</button></div>
+        <div class="switch">Turntable spin <button class="btn sm" id="cSpin">Off</button></div>
+        <div class="switch">Auto-target mode <button class="btn sm" id="cAuto">Off</button></div>
+      </div>
+      <div class="card" id="spectrum">
+        <div class="h">Stream &amp; hydration <span class="idx">03</span></div>
+        <div class="seg"><button class="btn sm lime" id="cFlow">Release</button><button class="btn sm" id="cFlush">🚽 Flush</button><button class="btn sm" id="cMop">🧽 Mop</button><button class="btn sm" id="cOver">⚡ Overdrive</button></div>
+        <div class="meter-row">Body water <b id="cBodyV">100%</b></div><div class="bar"><i id="cBody" style="width:100%"></i></div>
+        <div class="meter-row">Toilet bowl <b id="cBowlV">0%</b></div><div class="bar"><i id="cBowl"></i></div>
+        <label class="lbl">Feed the subject</label>
+        <div class="chips" id="cChips"></div>
+        <div class="meter-row">Targets <b id="cScore">0 hits · 0 down</b></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>HydroSim 3D, an educational toy. The color chart is general information, not medical advice: see a doctor for persistent red, brown or cloudy urine.</span>
+    <span><a href="simulator.html">simulator ↗</a> · <a href="https://github.com/yesjermo/urinal-physics">github ↗</a> · <a href="#" id="replaySplash">replay intro</a></span>
+  </footer>
+</main>
 
 <script>
-  const SUBS = {
-    water:  { label: 'High water', color: '#f6f1c2', note: 'Clear / pale yellow: well hydrated.' },
-    normal: { label: 'Normal', color: '#f0b84a', note: 'Soft amber: the healthy everyday range.' },
-    vitb:   { label: 'B-vitamins', color: '#dcff1a', note: 'Neon yellow: excess riboflavin (B2) fluoresces.' },
-    beet:   { label: 'Beetroot', color: '#d23c6a', note: 'Pinkish red: beeturia from betalain pigments.' },
-    severe: { label: 'Severe dehydration', color: '#7a3f0e', note: 'Dark amber / brown: concentrated, drink water.' },
-  };
-  const frame = document.getElementById('sim');
-  const send = (key, value) => frame.contentWindow.postMessage({ type: 'hydrosim:set', key, value }, '*');
-  const $ = id => document.getElementById(id);
-  const ui = { muted: true, flowing: false, spatial: true, substance: 'auto' };
-
-  // Audio
-  function setMuted(m) { ui.muted = m; send('muted', m); $('cMute').textContent = m ? '🔇 Muted' : '🔊 Sound on'; }
-  $('cMute').onclick = () => setMuted(!ui.muted);
-  $('cVol').oninput = e => { send('volume', +e.target.value); $('cVolV').textContent = Math.round(e.target.value * 100) + '%'; };
-  $('cSpatial').onclick = e => { ui.spatial = !ui.spatial; e.currentTarget.setAttribute('aria-checked', ui.spatial); send('spatial', ui.spatial); };
-  $('cPitch').oninput = e => { send('pitch', +e.target.value); $('cPitchV').textContent = (+e.target.value).toFixed(2) + '×'; };
-  document.querySelectorAll('#cSurface button').forEach(b => b.onclick = () => {
-    document.querySelectorAll('#cSurface button').forEach(x => x.setAttribute('aria-pressed', x === b));
-    send('surface', b.dataset.v);
-  });
-
-  // Hydration & substance chips
-  $('cHyd').oninput = e => { send('hydration', +e.target.value); $('cHydV').textContent = (e.target.value * 3.5).toFixed(1) + ' L/day'; };
-  for (const [k, s] of Object.entries(SUBS)) {
-    const b = document.createElement('button');
-    b.className = 'chip group flex flex-col items-center gap-1.5 text-[11px] text-slate-400';
-    b.setAttribute('aria-pressed', 'false'); b.dataset.k = k;
-    b.innerHTML = `<i class="w-full aspect-square rounded-xl block shadow-inner" style="background:${s.color}"></i><span class="truncate w-full text-center">${s.label}</span>`;
-    b.onclick = () => {
-      ui.substance = ui.substance === k ? 'auto' : k;
-      document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c.dataset.k === ui.substance));
-      $('cNote').textContent = ui.substance === 'auto' ? 'Auto: color follows water intake.' : SUBS[k].note;
-      send('substance', ui.substance);
-    };
-    $('cChips').appendChild(b);
-  }
-
-  // Scenario, spin, overdrive / respawn
-  document.querySelectorAll('#cScenario button').forEach(b => b.onclick = () => {
-    document.querySelectorAll('#cScenario button').forEach(x => x.setAttribute('aria-pressed', x === b));
-    send('scenario', b.dataset.v);
-    frame.contentWindow.postMessage({ type: 'hydrosim:view', view: b.dataset.v === 'range' ? 'wide' : 'side' }, '*');
-  });
-  let spin = false;
-  $('cSpin').onclick = e => { spin = !spin; e.currentTarget.setAttribute('aria-checked', spin); send('spin', spin); };
-  let dissolved = false, over = false;
-  $('cOver').onclick = () => {
-    if (dissolved) frame.contentWindow.postMessage({ type: 'hydrosim:respawn' }, '*');
-    else send('overdrive', !over);
-  };
-
-  // Stream, flush, views
-  function setFlow(f) { ui.flowing = f; send('flowing', f); }
-  $('cFlow').onclick = () => setFlow(!ui.flowing);
-  $('cFlush').onclick = () => frame.contentWindow.postMessage({ type: 'hydrosim:flush' }, '*');
-  document.querySelectorAll('#cViews button').forEach(b => b.onclick = () => frame.contentWindow.postMessage({ type: 'hydrosim:view', view: b.dataset.view }, '*'));
-  $('heroPlay').onclick = () => { setMuted(false); send('fill', 0.9); setFlow(true); };
-
-  // Telemetry → visualizer + readouts
-  const wave = $('wave'), wctx = wave.getContext('2d');
-  let tel = { bands: [], rms: 0, color: '#f0b84a' }, phase = 0;
-  addEventListener('message', e => {
-    const m = e.data; if (!m || m.type !== 'hydrosim:telemetry') return;
-    tel = m;
-    $('rFill').textContent = Math.round(m.fill * 500) + ' mL';
-    $('rPres').textContent = Math.round(m.pdet) + ' cmH₂O';
-    $('rFlow').textContent = m.flow.toFixed(1) + ' mL/s';
-    $('rDot').style.background = $('cDot').style.background = m.color;
-    $('rHex').textContent = $('cHex').textContent = m.color;
-    $('liveBadge').textContent = m.flowing ? '● streaming' : '● idle';
-    $('liveBadge').style.color = m.flowing ? '#4fd6e8' : '';
-    if (m.flowing !== ui.flowing) ui.flowing = m.flowing;
-    $('cFlow').textContent = m.flowing ? 'Stop stream' : 'Release stream';
-    dissolved = m.dissolved; over = m.overdrive;
-    $('cOver').textContent = dissolved ? 'Respawn' : over ? 'Disengage' : 'Engage';
-    $('cBody').style.width = (m.bodyWater * 100).toFixed(1) + '%';
-    $('cBodyV').textContent = dissolved ? 'pee ball 💛' : Math.round(m.bodyWater * 100) + '%';
-    $('cScore').textContent = `${m.hits} hits · ${m.down} down`;
-    if (m.audio === ui.muted) { ui.muted = !m.audio; $('cMute').textContent = ui.muted ? '🔇 Muted' : '🔊 Sound on'; }
-  });
-  function drawWave() {
-    const dpr = Math.min(devicePixelRatio, 2), w = wave.clientWidth * dpr, h = wave.clientHeight * dpr;
-    if (wave.width !== w || wave.height !== h) { wave.width = w; wave.height = h; }
-    wctx.clearRect(0, 0, w, h);
-    const bands = tel.bands.length ? tel.bands : new Array(32).fill(0);
-    const bw = w / bands.length;
-    bands.forEach((v, i) => {
-      const bh = Math.max(2 * dpr, v * h * 0.9);
-      wctx.globalAlpha = 0.25 + v * 0.75; wctx.fillStyle = tel.color;
-      wctx.fillRect(i * bw + bw * 0.2, h - bh, bw * 0.6, bh);
-    });
-    // Liquid sine waves scaled by RMS level
-    phase += 0.06;
-    const amp = 4 * dpr + tel.rms * h * 2.2;
-    for (const [col, k, off] of [['#4fd6e8', 1, 0], ['#f5c14b', 1.6, 1.3]]) {
-      wctx.globalAlpha = 0.8; wctx.strokeStyle = col; wctx.lineWidth = 1.5 * dpr; wctx.beginPath();
-      for (let x = 0; x <= w; x += 4) {
-        const y = h / 2 + Math.sin(x / w * Math.PI * 4 * k + phase * k + off) * amp * Math.sin(x / w * Math.PI);
-        x ? wctx.lineTo(x, y) : wctx.moveTo(x, y);
-      }
-      wctx.stroke();
+/* =====================================================================
+   Splash: a hazy green field swaying in the wind + lowercase net-board lines
+   ===================================================================== */
+(() => {
+  const splash = document.getElementById('splash'), cv = document.getElementById('field'), g = cv.getContext('2d');
+  let W, H, blades = [], running = true;
+  function resize() {
+    const dpr = Math.min(devicePixelRatio, 2); W = cv.width = innerWidth * dpr; H = cv.height = innerHeight * dpr;
+    const horizon = H * 0.46; blades = [];
+    for (let i = 0; i < 2600; i++) {
+      const d = Math.pow(Math.random(), 1.8);                 // 0 = far (horizon), 1 = near (bottom)
+      blades.push({ x: Math.random() * W, y: horizon + d * (H - horizon) * 1.05, h: (8 + d * 120) * dpr * (0.6 + Math.random() * 0.6),
+        w: (0.6 + d * 2.6) * dpr, ph: Math.random() * 6.28, hue: 78 + Math.random() * 34, l: 26 + d * 22 + Math.random() * 12 });
     }
-    wctx.globalAlpha = 1;
-    requestAnimationFrame(drawWave);
+    blades.sort((a, b) => a.y - b.y);
   }
-  drawWave();
+  function draw(t) {
+    if (!running) return;
+    const horizon = H * 0.46;
+    let sky = g.createLinearGradient(0, 0, 0, horizon);
+    sky.addColorStop(0, '#cfe6ea'); sky.addColorStop(0.7, '#eef6ee'); sky.addColorStop(1, '#f6f7ea');
+    g.fillStyle = sky; g.fillRect(0, 0, W, horizon + 2);
+    const sun = g.createRadialGradient(W * 0.72, H * 0.08, 0, W * 0.72, H * 0.08, H * 0.6);
+    sun.addColorStop(0, 'rgba(255,255,245,.95)'); sun.addColorStop(1, 'rgba(255,255,245,0)');
+    g.fillStyle = sun; g.fillRect(0, 0, W, H);
+    // distant tree line and hills, soft and bluish
+    g.fillStyle = '#9dbfa4';
+    g.beginPath(); g.moveTo(0, horizon);
+    for (let x = 0; x <= W; x += W / 60) g.lineTo(x, horizon - 18 * Math.sin(x / W * 7 + 1) - 10 * Math.sin(x / W * 23) - 14);
+    g.lineTo(W, horizon + 4); g.lineTo(0, horizon + 4); g.fill();
+    const ground = g.createLinearGradient(0, horizon, 0, H);
+    ground.addColorStop(0, '#9cc58a'); ground.addColorStop(1, '#3f7a35');
+    g.fillStyle = ground; g.fillRect(0, horizon, W, H - horizon);
+    // wind gusts travel across the field
+    const tt = t / 1000;
+    for (const b of blades) {
+      const gust = Math.sin(tt * 0.9 - b.x / W * 5) * 0.5 + 0.5;
+      const sway = (Math.sin(tt * 1.6 + b.ph + b.x * 0.004) * 0.35 + gust * 0.9) * b.h * 0.32;
+      g.strokeStyle = `hsl(${b.hue}, 45%, ${b.l + gust * 8}%)`; g.lineWidth = b.w;
+      g.beginPath(); g.moveTo(b.x, b.y);
+      g.quadraticCurveTo(b.x + sway * 0.3, b.y - b.h * 0.55, b.x + sway, b.y - b.h); g.stroke();
+    }
+    requestAnimationFrame(draw);
+  }
+  resize(); addEventListener('resize', resize); requestAnimationFrame(draw);
+
+  // net-board lines (all original text)
+  const LINES = [
+    ['02:14', 'water_ether', 'the field is quiet tonight. only the wind and the pipes.'],
+    ['02:16', 'seiryu', 'i keep thinking everything flows back to the same place eventually.'],
+    ['02:17', 'water_ether', 'from the next room it sounds like rain on rice paddies.'],
+    ['02:21', 'minty_06', 'drink water. it is the only thing that listens.'],
+    ['02:24', 'seiryu', 'the stream goes up, the stream comes down. physics is kind of gentle like that.'],
+    ['02:29', 'water_ether', 'flush before you leave. the ether remembers.'],
+  ];
+  const board = document.getElementById('board');
+  let li = 0, ci = 0, cur = null;
+  function type() {
+    if (!running || li >= LINES.length) return;
+    const [time, who, text] = LINES[li];
+    if (!cur) { cur = document.createElement('div'); cur.className = 'ln'; board.appendChild(cur); }
+    ci++;
+    cur.innerHTML = `<u>[${time}]</u> <b>::${who}::</b> ${text.slice(0, ci)}<span class="caret"></span>`;
+    if (ci >= text.length) { cur.innerHTML = `<u>[${time}]</u> <b>::${who}::</b> ${text}`; li++; ci = 0; cur = null; setTimeout(type, 650); }
+    else setTimeout(type, 28 + Math.random() * 40);
+  }
+  setTimeout(type, 1200);
+
+  function enter() {
+    if (splash.classList.contains('out')) return;
+    splash.classList.add('out');
+    setTimeout(() => { running = false; splash.style.display = 'none'; }, 1300);
+    try { sessionStorage.setItem('up-splash-seen', '1'); } catch (e) {}
+  }
+  splash.addEventListener('click', enter);
+  addEventListener('keydown', e => { if (splash.style.display !== 'none') enter(); }, { once: true });
+  try { if (sessionStorage.getItem('up-splash-seen')) { running = false; splash.style.display = 'none'; } } catch (e) {}
+  document.getElementById('replaySplash').onclick = e => {
+    e.preventDefault(); try { sessionStorage.removeItem('up-splash-seen'); } catch (err) {} location.reload();
+  };
+})();
+
+/* =====================================================================
+   Landing ↔ simulator (postMessage)
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const frame = $('sim');
+const post = msg => frame.contentWindow && frame.contentWindow.postMessage(msg, '*');
+const send = (key, value) => post({ type: 'hydrosim:set', key, value });
+const ui = { muted: true, spatial: true, spin: false, auto: false, over: false, dissolved: false, flowing: false };
+
+$('heroPlay').onclick = () => { setMuted(false); send('fill', 0.9); send('flowing', true); $('rig').scrollIntoView({ behavior: 'smooth' }); };
+$('sceneSel').onchange = e => { send('scenario', e.target.value); post({ type: 'hydrosim:view', view: e.target.value === 'range' || ['nyc', 'tokyo', 'paris'].includes(e.target.value) ? 'wide' : 'side' }); };
+
+function setMuted(m) { ui.muted = m; send('muted', m); $('cMute').textContent = m ? '🔇 Muted' : '🔊 Sound on'; $('cMute').classList.toggle('on', !m); }
+$('cMute').onclick = () => setMuted(!ui.muted);
+$('cVol').oninput = e => { send('volume', +e.target.value); $('cVolV').textContent = Math.round(e.target.value * 100) + '%'; };
+$('cPitch').oninput = e => { send('pitch', +e.target.value); $('cPitchV').textContent = (+e.target.value).toFixed(2) + '×'; };
+$('cSpatial').onclick = e => { ui.spatial = !ui.spatial; send('spatial', ui.spatial); e.target.textContent = ui.spatial ? 'On' : 'Off'; e.target.classList.toggle('on', ui.spatial); };
+document.querySelectorAll('#cSurface button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#cSurface button').forEach(x => x.classList.toggle('on', x === b)); send('surface', b.dataset.v);
+});
+$('cSkin').onchange = e => send('skinStyle', e.target.value);
+document.querySelectorAll('#cViews button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#cViews button').forEach(x => x.classList.toggle('on', x === b)); post({ type: 'hydrosim:view', view: b.dataset.view });
+});
+$('cSpin').onclick = e => { ui.spin = !ui.spin; send('spin', ui.spin); e.target.textContent = ui.spin ? 'On' : 'Off'; e.target.classList.toggle('on', ui.spin); };
+$('cAuto').onclick = e => { ui.auto = !ui.auto; send('autoFire', ui.auto); if (!ui.auto) send('autoAim', false); e.target.textContent = ui.auto ? 'On' : 'Off'; e.target.classList.toggle('on', ui.auto); };
+$('cFlow').onclick = () => send('flowing', !ui.flowing);
+$('cFlush').onclick = () => post({ type: 'hydrosim:flush' });
+$('cMop').onclick = () => post({ type: 'hydrosim:mop' });
+$('cOver').onclick = () => ui.dissolved ? post({ type: 'hydrosim:respawn' }) : send('overdrive', !ui.over);
+
+const INTAKE = [['water', '💧', 'Water'], ['coffee', '☕', 'Coffee'], ['beer', '🍺', 'Beer'], ['energy', '⚡', 'Energy'], ['vitb', '💊', 'B-vit'],
+  ['beet', '🔴', 'Beet'], ['carrot', '🥕', 'Carrot'], ['candy', '🍬', 'Blue candy'], ['fava', '🫘', 'Fava'], ['fries', '🍟', 'Fries']];
+for (const [id, icon, name] of INTAKE) {
+  const b = document.createElement('button'); b.className = 'chip'; b.innerHTML = `<em>${icon}</em>${name}`;
+  b.onclick = () => post({ type: 'hydrosim:consume', id }); $('cChips').appendChild(b);
+}
+
+// Telemetry from the simulator → header, stats, status chip, waveform
+const wave = $('wave'), wctx = wave.getContext('2d');
+let tel = { bands: [], rms: 0, color: '#f0b84a' }, phase = 0;
+const SCENE_NAME = { bathroom: 'BATHROOM', park: 'CITY PARK', campfire: 'CAMPFIRE', snow: 'SNOW FIELD', range: 'SLIME RANGE', nyc: 'NEW YORK', tokyo: 'TOKYO', paris: 'PARIS' };
+addEventListener('message', e => {
+  const m = e.data; if (!m || m.type !== 'hydrosim:telemetry') return;
+  tel = m;
+  ui.flowing = m.flowing; ui.over = m.overdrive; ui.dissolved = m.dissolved;
+  const status = m.dissolved ? 'PEE BALL' : m.flood > 50 && m.bowl >= 1 ? 'OVERFLOW' : m.flowing ? (m.overdrive ? 'OVERDRIVE' : 'RELEASING') : m.fill > 0.9 ? 'URGENT' : 'STANDBY';
+  const active = status !== 'STANDBY' && status !== 'URGENT';
+  $('tStatus').textContent = status; $('tDot').classList.toggle('on', active); $('vDot').classList.toggle('on', m.flowing);
+  $('vState').textContent = m.flowing ? 'streaming' : 'idle';
+  $('tScene').textContent = SCENE_NAME[m.scenario] || m.scenario;
+  if (document.activeElement !== $('sceneSel')) $('sceneSel').value = m.scenario;
+  $('chip').textContent = status;
+  $('chipSub').textContent = m.flowing ? `flow ${m.flow.toFixed(1)} ml/s · range ${m.range.toFixed(2)} m` : `bladder ${Math.round(m.fill * 500)} ml`;
+  $('rFill').innerHTML = `${Math.round(m.fill * 500)}<em>ML</em>`;
+  $('rPres').innerHTML = `${Math.round(m.pdet)}<em>CMH₂O</em>`;
+  $('rFlow').innerHTML = `${m.flow.toFixed(1)}<em>ML/S</em>`;
+  $('rDot').style.background = m.color; $('rHex').textContent = m.color;
+  $('cFlow').textContent = m.flowing ? 'Stop' : 'Release';
+  $('cOver').textContent = m.dissolved ? 'Respawn' : m.overdrive ? 'Disengage' : '⚡ Overdrive';
+  $('cBody').style.width = (m.bodyWater * 100).toFixed(1) + '%'; $('cBodyV').textContent = m.dissolved ? 'pee ball' : Math.round(m.bodyWater * 100) + '%';
+  $('cBowl').style.width = (m.bowl * 100).toFixed(1) + '%'; $('cBowlV').textContent = Math.round(m.bowl * 100) + '%';
+  $('cScore').textContent = `${m.hits} hits · ${m.down} down`;
+  if (m.audio === ui.muted) { ui.muted = !m.audio; $('cMute').textContent = ui.muted ? '🔇 Muted' : '🔊 Sound on'; $('cMute').classList.toggle('on', !ui.muted); }
+});
+function drawWave() {
+  const dpr = Math.min(devicePixelRatio, 2), w = wave.clientWidth * dpr, h = wave.clientHeight * dpr;
+  if (wave.width !== w || wave.height !== h) { wave.width = w; wave.height = h; }
+  wctx.clearRect(0, 0, w, h);
+  const bands = tel.bands && tel.bands.length ? tel.bands : new Array(32).fill(0), bw = w / bands.length;
+  bands.forEach((v, i) => {
+    const bh = Math.max(2 * dpr, v * h * 0.9);
+    wctx.fillStyle = i % 4 === 3 ? '#d6ff3d' : '#0d0f12'; wctx.globalAlpha = 0.25 + v * 0.75;
+    wctx.fillRect(i * bw + bw * 0.2, h - bh, bw * 0.6, bh);
+  });
+  wctx.globalAlpha = 1; phase += 0.05;
+  const amp = 3 * dpr + tel.rms * h * 2;
+  wctx.strokeStyle = '#0d0f12'; wctx.lineWidth = 1.5 * dpr; wctx.beginPath();
+  for (let x = 0; x <= w; x += 4) { const y = h / 2 + Math.sin(x / w * Math.PI * 5 + phase) * amp * Math.sin(x / w * Math.PI); x ? wctx.lineTo(x, y) : wctx.moveTo(x, y); }
+  wctx.stroke();
+  requestAnimationFrame(drawWave);
+}
+drawWave();
 </script>
 </body>
 </html>

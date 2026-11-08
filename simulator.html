@@ -169,6 +169,8 @@
   #hudTop .fld { padding: 0 14px; border-left: 1px solid var(--edge); display: flex; flex-direction: column; justify-content: center; gap: 3px; min-width: 96px; }
   #hudTop .fld small { font-size: 8px; letter-spacing: .14em; color: var(--dim); text-transform: uppercase; }
   #hudTop .fld b { font-size: 11px; text-transform: uppercase; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  #hudTop .hdrsel { border: none; background: transparent; padding: 0 14px 0 0; font: 600 11px 'JetBrains Mono', monospace; text-transform: uppercase; color: var(--ink); cursor: pointer; }
+  #hudTop .hdrsel:hover { text-decoration: underline; }
   #hudTop .dot { width: 7px; height: 7px; border-radius: 50%; background: #c3c7cd; }
   #hudTop .dot.on { background: #8bc400; box-shadow: 0 0 0 3px rgba(214,255,61,.65); }
 
@@ -228,6 +230,8 @@
     #statusChip { left: 12px; bottom: 150px; }
     .toggles { bottom: 92px; }
   }
+  body.embed #hudTop { display: none; }   /* the landing page already has its own top bar */
+  body.embed #unlock { top: 12px; }
   body.embed #opLog { left: 12px; right: 12px; }
   body.embed #statusChip { left: 12px; bottom: 150px; }
   body.embed .toggles { bottom: 92px; }
@@ -249,7 +253,7 @@
   <div class="logo">UP</div>
   <div class="ttl"><small>Hydration rig · bladder &amp; acoustics simulator</small><b>HydroSim UX-1 <i></i></b></div>
   <div class="grow"></div>
-  <div class="fld"><small>Scenario</small><b id="hdrScene">—</b></div>
+  <div class="fld keep"><small>Scenario · location</small><select id="hdrSceneSel" class="hdrsel" title="Change scenario / location"></select></div>
   <div class="fld"><small>Runtime</small><b id="hdrTime">00:00</b></div>
   <div class="fld keep"><small>Status</small><b><span class="dot" id="hdrDot"></span><span id="hdrStatus">STANDBY</span></b></div>
   <div class="fld"><small>Operator</small><b>YOU · ON DUTY</b></div>
@@ -2693,6 +2697,8 @@ for (const id of ['panelSound', 'panelBody']) $(id).querySelectorAll('section > 
   const s = document.createElement('span'); s.className = 'idx'; s.textContent = String(i + 1).padStart(2, '0'); h.appendChild(s);
 });
 $('opPlay').onclick = () => setValue('flowing', !state.flowing);
+for (const [k, sc] of Object.entries(SCENARIOS)) $('hdrSceneSel').add(new Option(sc.label.replace(/\(.*\)/, '').trim(), k));
+$('hdrSceneSel').onchange = e => setValue('scenario', e.target.value);
 $('btnLabels').onclick = () => setValue('labels', !state.labels);
 $('btnTurntable').onclick = () => setValue('spin', !state.spin);
 $('btnStudio').onclick = () => setValue('studio', !state.studio);
@@ -2791,7 +2797,7 @@ function hudFrame(dt) {
   hud.uiT += dt; if (hud.uiT < 0.1) return; hud.uiT = 0;
 
   const run = (performance.now() - hud.t0) / 1000, [status, sub, active] = systemStatus();
-  $('hdrScene').textContent = sceneName();
+  if (document.activeElement !== $('hdrSceneSel')) $('hdrSceneSel').value = state.scenario;
   $('hdrTime').textContent = mmss(run);
   $('hdrStatus').textContent = status; $('hdrDot').classList.toggle('on', active);
   $('chipText').textContent = status; $('chipSub').textContent = sub;
