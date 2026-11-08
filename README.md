@@ -111,7 +111,8 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 - 🗽 **New York street:** brick walk-ups with fire escapes, a parked yellow cab, hydrant, trash cans
 - 🏮 **Tokyo neon alley:** neon signs, a glowing vending machine, paper lanterns (crank the power to reach them)
 - 🥐 **Paris boulevard:** Haussmann façades, café table with wine bottles, wicker chairs, a distant iron tower
-- 🎯 **Auto-target mode** aims *and* fires by itself, skips targets it can't reach, and gives up on anything blocked after 1.2 s
+- 🎯 **Auto-target mode** aims *and* fires by itself: it judges reach at full pressure, **leads moving targets**, turns the stream power up when nothing is in reach, prefers targets you're already facing, and aims into the bowl in the bathroom
+- 🎯 **Aim trainer:** a training room with glowing orbs and 60 s rounds. **Move the mouse to aim, hold the button to pee.** Shows a live time / pops / accuracy / avg time-to-kill bar, a landing reticle, and saves your best score.
 - 🎯 **Auto-aim** solves the ballistic equation for you:
   $$\theta = \arctan\left(\frac{v^2 - \sqrt{v^4 - g(gd^2 + 2\,\Delta y\, v^2)}}{g\,d}\right)$$
   *(Yes, there's a physics equation in a pee simulator README. You're welcome.)*
