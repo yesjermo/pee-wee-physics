@@ -1,0 +1,2187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>HydroSim 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #070a10;
+    --panel: rgba(13, 18, 28, 0.8);
+    --line: rgba(148, 170, 210, 0.16);
+    --text: #e6ecf5;
+    --muted: #8796ad;
+    --accent: #f5c14b;
+    --accent2: #4fd6e8;
+    --danger: #ff5d6c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+    font: 13px/1.4 Inter, system-ui, sans-serif; }
+  #viewport { position: fixed; inset: 0; }
+  canvas.webgl { display: block; width: 100%; height: 100%; }
+
+  .panel { position: fixed; top: 12px; width: 290px; max-height: calc(100% - 84px); overflow-y: auto;
+    background: var(--panel); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; z-index: 5;
+    scrollbar-width: thin; transition: transform .3s ease, opacity .3s ease; }
+  .panel.left { left: 12px; }
+  .panel.right { right: 12px; width: 262px; }
+  .panel.hidden { opacity: 0; pointer-events: none; transform: translateY(-8px); }
+  .panel h2 { margin: 0 0 8px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .panel section + section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+
+  .row { margin: 7px 0; }
+  .row label { display: flex; justify-content: space-between; color: #b9c5d8; font-size: 12px; margin-bottom: 3px; }
+  .row label span { font-family: 'JetBrains Mono', monospace; color: var(--accent); font-size: 11px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); height: 16px; }
+  select { width: 100%; background: #111827; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; }
+  .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  button { font: inherit; color: var(--text); background: #162033; border: 1px solid var(--line); border-radius: 9px;
+    padding: 7px 10px; cursor: pointer; transition: background .15s, border-color .15s; }
+  button:hover { background: #1d2a42; border-color: rgba(245,193,75,.4); }
+  button.primary { background: linear-gradient(135deg, #f5c14b, #e2902a); color: #1a1205; border: none; font-weight: 600; flex: 1; }
+  button.primary.on { background: linear-gradient(135deg, #4fd6e8, #2a8fe2); color: #031018; }
+  button.danger { background: linear-gradient(135deg, #ff5d6c, #c2304a); border: none; color: #fff; font-weight: 600; }
+  button.active { border-color: var(--accent); color: var(--accent); }
+  .check { display: flex; align-items: center; gap: 8px; color: #b9c5d8; font-size: 12px; margin: 7px 0; cursor: pointer; }
+  .check input { accent-color: var(--accent2); }
+  .check.warn { color: #ffb4a0; }
+  .check.warn input { accent-color: var(--danger); }
+
+  .meter { height: 10px; border-radius: 6px; background: #0d1422; border: 1px solid var(--line); overflow: hidden; }
+  .meter > i { display: block; height: 100%; width: 40%; background: linear-gradient(90deg, #4fd6e8, #f5c14b 60%, #ff5d6c); transition: width .1s linear; }
+  .meter.body > i { background: linear-gradient(90deg, #ff5d6c, #f5c14b 35%, #4fd6e8); }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+  .stat { background: #0d1422; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+  .stat.wide { grid-column: span 2; }
+  .stat b { display: block; font: 500 13px 'JetBrains Mono', monospace; color: var(--text); }
+  .stat small { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+  .urge { font-weight: 600; font-size: 12px; }
+  .warnline { color: var(--danger); font-size: 11.5px; font-weight: 600; min-height: 16px; margin-top: 4px; }
+
+  .swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-top: 8px; }
+  .swatch { aspect-ratio: 1; border-radius: 7px; border: 2px solid transparent; cursor: pointer; padding: 0; }
+  .swatch.active { border-color: #fff; }
+  .note { color: var(--muted); font-size: 11.5px; margin-top: 6px; min-height: 30px; }
+  .current-color { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; }
+  .current-color i { width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(255,255,255,.3); }
+  .filebtn { flex: 1; text-align: center; font: inherit; color: var(--text); background: #162033; border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; cursor: pointer; }
+  .filebtn:hover { border-color: rgba(245,193,75,.4); }
+  .intake { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 6px; }
+  .intake button { padding: 6px 2px; font-size: 10.5px; line-height: 1.15; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .intake button em { font-style: normal; font-size: 18px; }
+  .intake button small { color: var(--muted); font-size: 9.5px; }
+  .intake-log { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; min-height: 22px; }
+  .intake-log span { font-size: 10.5px; background: #0d1422; border: 1px solid var(--line); border-radius: 999px; padding: 2px 7px; color: #b9c5d8; }
+
+  #viz { width: 100%; height: 70px; display: block; border-radius: 8px; background: #0a101b; border: 1px solid var(--line); }
+
+  .views { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 6px; z-index: 6;
+    background: var(--panel); backdrop-filter: blur(14px); border: 1px solid var(--line); border-radius: 12px; padding: 6px; }
+  .views button { padding: 7px 11px; font-size: 12px; white-space: nowrap; }
+  .toggles { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); display: none; gap: 6px; z-index: 7; }
+  .toggles button { background: var(--panel); backdrop-filter: blur(10px); }
+
+  #unlock { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 8; background: rgba(245,193,75,.95);
+    color: #1a1205; font-weight: 600; border-radius: 999px; padding: 8px 16px; cursor: pointer; box-shadow: 0 6px 30px rgba(245,193,75,.35);
+    animation: pulse 2s ease-in-out infinite; border: none; }
+  #unlock.gone { display: none; }
+  @keyframes pulse { 50% { box-shadow: 0 6px 40px rgba(245,193,75,.6); } }
+
+  #banner { position: fixed; top: 38%; left: 50%; transform: translate(-50%, -50%); z-index: 9; text-align: center; display: none; }
+  #banner.show { display: block; animation: pop .5s cubic-bezier(.2, 1.6, .4, 1); }
+  #banner h1 { margin: 0; font: 800 44px/1 Inter, sans-serif; color: var(--accent); text-shadow: 0 4px 40px rgba(245,193,75,.6); }
+  #banner p { margin: 8px 0 14px; color: #cfd8e6; }
+  @keyframes pop { from { transform: translate(-50%, -50%) scale(.6); opacity: 0; } }
+
+  .hint { position: fixed; right: 14px; bottom: 16px; color: var(--muted); font-size: 11px; z-index: 4; }
+  kbd { font-family: 'JetBrains Mono', monospace; background: #162033; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+
+  /* Compact layout: narrow screens & embed mode */
+  @media (max-width: 860px) {
+    .toggles { display: flex; top: auto; bottom: 64px; }
+    .panel { top: 12px; left: 12px !important; right: 12px !important; width: auto !important; max-height: calc(100% - 140px); }
+    .hint { display: none; }
+    #unlock { top: auto; bottom: 108px; }
+    #banner h1 { font-size: 32px; }
+  }
+  body.embed .toggles { display: flex; top: auto; bottom: 62px; }
+  body.embed .hint { display: none; }
+  body.embed #unlock { top: 12px; bottom: auto; }
+  @media (max-width: 520px) { .views { left: 12px; right: 12px; transform: none; overflow-x: auto; scrollbar-width: none; } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="viewport"></div>
+<button id="unlock">🔊 Click to enable sound</button>
+<div id="banner"><h1>💛 PEE BALL 💛</h1><p id="bannerText">You peed out your entire body water.</p><button class="primary" id="btnRespawn2">Respawn as human</button></div>
+
+<!-- ============ LEFT PANEL ============ -->
+<aside class="panel left" id="panelBody">
+  <section>
+    <h2>Character</h2>
+    <div class="row"><label>Figure</label><select data-key="figure" id="figureSel">
+      <option value="male">Male (standing)</option><option value="female">Female (sitting on the toilet)</option></select></div>
+    <div class="row"><label>Skin / costume</label><select data-key="skinStyle">
+      <option value="skin">Realistic skin</option><option value="clay">Clay sculpt</option><option value="muscle">Muscle anatomy</option>
+      <option value="skeleton">Skeleton</option><option value="gold">Gold statue</option><option value="chrome">Chrome</option>
+      <option value="gloop">Gloop costume (purple)</option></select></div>
+    <div class="row"><label>Pose (standing figure)</label><select data-key="pose">
+      <option value="idle">Relaxed idle</option><option value="sad_pose">Sad slump</option><option value="sneak_pose">Sneaky crouch</option>
+      <option value="agree">Nodding</option><option value="headShake">Head shake</option><option value="walk">Walk in place</option>
+      <option value="run">Run in place</option></select></div>
+    <div class="row"><label>Facial expression</label><select data-key="expression">
+      <option value="auto">Auto (reacts to bladder)</option><option value="neutral">Neutral</option><option value="happy">Happy</option>
+      <option value="relieved">Relieved</option><option value="surprised">Surprised</option><option value="angry">Angry</option>
+      <option value="strained">Straining</option><option value="embarrassed">Embarrassed</option></select></div>
+    <label class="check"><input type="checkbox" data-key="studio"> Studio render (ambient occlusion shading)</label>
+    <div class="btns"><label class="filebtn">📂 Load your own rigged .glb<input type="file" id="glbFile" accept=".glb" hidden></label></div>
+    <div class="note" id="modelNote" style="min-height:0">Loading realistic body…</div>
+  </section>
+  <section>
+    <h2>Scenario &amp; pose</h2>
+    <select data-key="scenario" id="scenario"></select>
+    <div class="row"><label>Turn (yaw) <span id="v-yaw"></span></label><input type="range" data-key="yaw" min="-3.1416" max="3.1416" step="0.01"></div>
+    <div class="row"><label>Flip head-over-heels <span id="v-flip"></span></label><input type="range" data-key="flip" min="-3.1416" max="3.1416" step="0.01"></div>
+    <div class="row"><label>Cartwheel (roll) <span id="v-roll"></span></label><input type="range" data-key="roll" min="-3.1416" max="3.1416" step="0.01"></div>
+    <div class="btns"><button id="btnUpright" style="flex:1">⬆ Stand upright</button></div>
+    <label class="check"><input type="checkbox" data-key="spin"> Auto-spin 360°</label>
+    <div class="row"><label>Spin axis</label><select data-key="spinAxis">
+      <option value="yaw">Turn around (yaw)</option><option value="pitch">Flip head-over-heels</option>
+      <option value="roll">Cartwheel</option><option value="tumble">Tumble (all axes)</option></select></div>
+    <div class="row"><label>Spin speed / direction <span id="v-spinSpeed"></span></label><input type="range" data-key="spinSpeed" min="-4" max="4" step="0.05"></div>
+    <div class="note" style="min-height:0">Tip: drag the person: left/right turns, up/down flips them upside down. Flick to keep spinning.</div>
+    <label class="check"><input type="checkbox" data-key="autoAim"> Auto-aim at nearest target</label>
+    <div class="btns"><button id="btnResetTargets" style="flex:1">↺ Reset targets</button></div>
+  </section>
+  <section>
+    <h2>Body type</h2>
+    <div class="row"><label>Body weight <span id="v-weight"></span></label><input type="range" data-key="weight" min="0" max="1" step="0.01"></div>
+    <div class="row"><label>Waist size <span id="v-waist"></span></label><input type="range" data-key="waist" min="0" max="1" step="0.01"></div>
+    <div class="row"><label>Belly scale <span id="v-belly"></span></label><input type="range" data-key="belly" min="0" max="1" step="0.01"></div>
+    <div class="row"><label>Skin opacity (X-ray) <span id="v-skin"></span></label><input type="range" data-key="skin" min="0.05" max="1" step="0.01"></div>
+  </section>
+  <section>
+    <h2>Hydration &amp; bladder</h2>
+    <div class="row"><label>Water intake level <span id="v-hydration"></span></label><input type="range" data-key="hydration" min="0" max="1" step="0.01"></div>
+    <div class="row"><label>Bladder volume <span id="v-fill"></span></label><div class="meter"><i id="fillBar"></i></div></div>
+    <div class="row" style="display:flex;justify-content:space-between;align-items:center"><span style="color:#b9c5d8;font-size:12px">Urge</span><span class="urge" id="urge">—</span></div>
+    <div class="row"><label>Body water <span id="v-body"></span></label><div class="meter body"><i id="bodyBar"></i></div></div>
+    <div class="warnline" id="bodyWarn"></div>
+    <div class="row"><label>Toilet bowl <span id="v-bowl"></span></label><div class="meter"><i id="bowlBar"></i></div></div>
+    <div class="warnline" id="bowlWarn"></div>
+  </section>
+  <section>
+    <h2>Stream control</h2>
+    <div class="row"><label>Aim angle <span id="v-aim"></span></label><input type="range" data-key="aim" min="-0.8" max="0.75" step="0.01"></div>
+    <div class="row"><label>Stream power (distance) <span id="v-power"></span></label><input type="range" data-key="power" min="0.5" max="2" step="0.01"></div>
+    <div class="row"><label>Pee duration <span id="v-duration"></span></label><input type="range" data-key="duration" min="0" max="30" step="1"></div>
+    <label class="check"><input type="checkbox" data-key="preview"> Show trajectory preview</label>
+    <div class="stats"><div class="stat"><small>Predicted range</small><b id="t-range">0 m</b></div><div class="stat"><small>Time left</small><b id="t-left">—</b></div></div>
+    <div class="btns" style="margin-top:8px">
+      <button class="primary" id="btnFlow">Release <kbd>Space</kbd></button>
+      <button id="btnDrink" title="Adds a glass of water">💧 Drink</button>
+      <button id="btnFlush">🚽 Flush</button>
+      <button id="btnMop" title="Mop the floor and scrub the toilet">🧽 Mop &amp; scrub</button>
+    </div>
+    <label class="check"><input type="checkbox" data-key="auto"> Auto cycle (release when bladder is full)</label>
+    <label class="check warn"><input type="checkbox" data-key="overdrive"> ⚡ Overdrive: unlimited bladder, drains body water</label>
+    <div class="btns"><button class="danger" id="btnRespawn" style="flex:1;display:none">Respawn as human</button></div>
+  </section>
+  <section>
+    <h2>Food &amp; drink intake</h2>
+    <div class="intake" id="intake"></div>
+    <div class="intake-log" id="intakeLog"></div>
+    <div class="btns" style="margin-top:6px"><button id="btnClearIntake" style="flex:1">Clear intake history</button></div>
+  </section>
+  <section>
+    <h2>Urine color (preset override)</h2>
+    <select data-key="substance" id="substance"></select>
+    <div class="swatches" id="swatches"></div>
+    <div class="current-color"><i id="colorDot"></i><span id="colorName"></span></div>
+    <div class="note" id="colorNote"></div>
+  </section>
+</aside>
+
+<!-- ============ RIGHT PANEL ============ -->
+<aside class="panel right" id="panelSound">
+  <section>
+    <h2>Sound engine</h2>
+    <div class="btns"><button id="btnMute" style="flex:1">🔇 Muted</button></div>
+    <div class="row"><label>Master volume <span id="v-volume"></span></label><input type="range" data-key="volume" min="0" max="1" step="0.01"></div>
+    <label class="check"><input type="checkbox" data-key="spatial"> 3D positional (HRTF) audio</label>
+    <div class="row"><label>Toilet surface (bathroom)</label>
+      <select data-key="surface">
+        <option value="ceramic">Ceramic Toilet / Tap Sound</option>
+        <option value="water">Water Surface Splash</option>
+        <option value="floor">Flat Floor</option>
+      </select></div>
+    <div class="row"><label>Impact resonant pitch <span id="v-pitch"></span></label><input type="range" data-key="pitch" min="0.5" max="2" step="0.01"></div>
+    <canvas id="viz" width="460" height="140"></canvas>
+  </section>
+  <section>
+    <h2>Telemetry</h2>
+    <div class="stats">
+      <div class="stat"><small>Detrusor P</small><b id="t-pres">0 cmH₂O</b></div>
+      <div class="stat"><small>Flow rate</small><b id="t-flow">0 mL/s</b></div>
+      <div class="stat"><small>Exit velocity</small><b id="t-vel">0 m/s</b></div>
+      <div class="stat"><small>Voided</small><b id="t-void">0 mL</b></div>
+      <div class="stat wide"><small>Targets</small><b id="t-score">0 hits · 0 down</b></div>
+    </div>
+  </section>
+</aside>
+
+<div class="toggles">
+  <button id="tglBody">⚙ Body</button>
+  <button id="tglSound">🎚 Sound</button>
+</div>
+<nav class="views" id="views">
+  <button data-view="side">Side View</button>
+  <button data-view="top">Top View</button>
+  <button data-view="macro">Macro Stream</button>
+  <button data-view="cross">Cross-Section</button>
+  <button data-view="wide">Wide</button>
+</nav>
+<div class="hint">Drag the person to spin/flip · Drag elsewhere to orbit · Right-drag to pan · Scroll to zoom · <kbd>Space</kbd> release · <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> rotate</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* =====================================================================
+   1. CONFIG & STATE
+   ===================================================================== */
+const EMBED = new URLSearchParams(location.search).has('embed');
+if (EMBED) document.body.classList.add('embed');
+
+const CAPACITY_ML = 500;        // functional bladder capacity
+const QMAX_ML_S   = 24;         // typical peak male flow rate
+const FILL_SPEED  = 4;          // sim time multiplier while filling
+const VOID_SPEED  = 2;          // sim time multiplier while voiding
+const BODY_RESERVE_ML = 3000;   // cartoon "expendable" body water before you turn into a pee ball
+const OVERDRIVE = 1.8;          // flow & speed multiplier in overdrive
+const GRAVITY     = 9.81;
+const TOILET_Z    = 0.78;
+const BOWL_R      = 0.14, RIM_R = 0.225, RIM_Y = 0.435, WATER_Y = 0.30, DRY_Y = 0.235;
+const SKIN_TONE   = new THREE.Color('#c98f6c');
+const PIVOT_Y     = 0.95;
+const FACE_ON_RIG = { pos: [0, 0.1, 0.02], scale: 1 };   // face offset from the rig's head bone         // body tumbles around its centre of mass
+const HUMAN_MODEL_URLS = [          // rigged, MIT-licensed three.js example character
+  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/models/gltf/Xbot.glb',
+  'https://threejs.org/examples/models/gltf/Xbot.glb',
+];
+const FEMALE_MODEL_URLS = [
+  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/models/gltf/Michelle.glb',
+  'https://threejs.org/examples/models/gltf/Michelle.glb',
+];
+
+const SUBSTANCES = {
+  auto:   { label: 'Auto (from food & drink intake)' },
+  water:  { label: 'High water intake',        color: '#f6f1c2', note: 'Clear / pale yellow — well hydrated. Urochrome is highly diluted.' },
+  normal: { label: 'Normal hydration',         color: '#f0b84a', note: 'Soft amber — the healthy everyday range.' },
+  vitb:   { label: 'Dehydrated / B-vitamins',  color: '#dcff1a', note: 'Neon yellow — excess riboflavin (vitamin B2) is fluorescent and excreted.' },
+  beet:   { label: 'Beetroot intake',          color: '#d23c6a', note: 'Pinkish red — beeturia from betalain pigments. Harmless, but red urine without beets warrants a doctor visit.' },
+  severe: { label: 'Severe dehydration',       color: '#7a3f0e', note: 'Dark amber / brownish — concentrated urine. Drink water; persistent brown urine needs medical attention.' },
+};
+const AUTO_STOPS = [[0, '#7a3f0e'], [0.25, '#c27a17'], [0.5, '#f0b84a'], [0.75, '#f5dc7a'], [1, '#f6f1c2']];
+
+/* Pigments from food/drink: each accumulates on intake and decays as it is metabolised. */
+const PIGMENTS = {
+  neon:   { color: '#dcff1a', note: 'Neon yellow: riboflavin (vitamin B2) from supplements or energy drinks.' },
+  beet:   { color: '#d23c6a', note: 'Pink-red: betalain pigments from beets / blackberries (beeturia). Harmless.' },
+  orange: { color: '#ff9124', note: 'Orange: carotenoids from lots of carrots (also a sign of concentration).' },
+  green:  { color: '#38c7a0', note: 'Green-blue: blue food dye mixing with yellow urochrome.' },
+  brown:  { color: '#6b3a12', note: 'Dark brown: fava beans / rhubarb pigments. Brown urine without them → see a doctor.' },
+};
+const INTAKE = [
+  { id: 'water',   icon: '💧', label: 'Water',        ml: 250 },
+  { id: 'water1l', icon: '🚰', label: 'Water 1 L',    ml: 1000 },
+  { id: 'melon',   icon: '🍉', label: 'Watermelon',   ml: 280 },
+  { id: 'coffee',  icon: '☕', label: 'Coffee',       ml: 200, diuretic: 0.6, pig: { brown: 0.15 } },
+  { id: 'beer',    icon: '🍺', label: 'Beer',         ml: 330, diuretic: 1.0 },
+  { id: 'soda',    icon: '🥤', label: 'Soda',         ml: 330 },
+  { id: 'energy',  icon: '⚡', label: 'Energy drink', ml: 250, diuretic: 0.4, pig: { neon: 1.2 } },
+  { id: 'vitb',    icon: '💊', label: 'B-vitamins',   ml: 0,   pig: { neon: 2 } },
+  { id: 'beet',    icon: '🔴', label: 'Beetroot',     ml: 40,  pig: { beet: 1.6 } },
+  { id: 'berry',   icon: '🫐', label: 'Blackberries', ml: 30,  pig: { beet: 0.7 } },
+  { id: 'carrot',  icon: '🥕', label: 'Carrots',      ml: 30,  pig: { orange: 1.2 } },
+  { id: 'candy',   icon: '🍬', label: 'Blue candy',   ml: 0,   pig: { green: 1.4 } },
+  { id: 'fava',    icon: '🫘', label: 'Fava beans',   ml: 20,  pig: { brown: 1.2 } },
+  { id: 'fries',   icon: '🍟', label: 'Salty fries',  ml: -150 },
+  { id: 'ramen',   icon: '🍜', label: 'Salty ramen',  ml: -60 },
+];
+const pigments = Object.fromEntries(Object.keys(PIGMENTS).map(k => [k, 0]));
+const intakeLog = {};
+const BOWL_CAP_ML = 1200;       // toilet bowl volume before it overflows
+
+const SCENARIOS = {
+  bathroom: { label: '🚽 Bathroom',            bg: '#080b12', hemi: 0.7 },
+  park:     { label: '🌳 City park (tree)',    bg: '#142235', hemi: 1.0 },
+  campfire: { label: '🔥 Campfire (put it out)', bg: '#05060a', hemi: 0.25 },
+  snow:     { label: '❄️ Snow field (snowman)', bg: '#1c2634', hemi: 1.1 },
+  range:    { label: '🟢 Slime target range',  bg: '#0b0f18', hemi: 0.65 },
+};
+
+const state = {
+  figure: 'male', skinStyle: 'skin', pose: 'idle', expression: 'auto', studio: false,
+  scenario: 'bathroom', yaw: 0, flip: 0, roll: 0, spin: false, spinAxis: 'yaw', spinSpeed: 0.7, autoAim: false,
+  weight: 0.45, waist: 0.45, belly: 0.3, skin: 1,
+  hydration: 0.6, fill: 0.55, aim: -0.42, bodyWater: 1,
+  power: 1, duration: 0, preview: true, bowl: 0, flood: 0,
+  flowing: false, auto: EMBED, overdrive: false, dissolved: false, substance: 'auto',
+  volume: 0.7, muted: true, spatial: true, surface: 'water', pitch: 1,
+  voided: 0, view: 'side',
+};
+const sim = { env: 0, pressure: 0, flow: 0, pdet: 0, speed: 0, dissolve: 0, diuretic: 0, flowTime: 0,
+  mlPerParticle: 0, flushing: 0, spillT: 0, submerged: 0, range: 0, stain: 0, yawVel: 0, pitchVel: 0 };
+const score = { hits: 0, down: 0 };
+
+/* =====================================================================
+   2. RENDERER / SCENE / CAMERA
+   ===================================================================== */
+const container = document.getElementById('viewport');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.localClippingEnabled = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.domElement.classList.add('webgl');
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+// Image-based lighting gives ceramic, chrome and skin realistic reflections
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+scene.background = new THREE.Color('#080b12');
+scene.fog = new THREE.Fog('#080b12', 7, 16);
+
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.02, 60);
+camera.position.set(2.6, 1.35, 0.7);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.8, 0.4);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 0.2;
+controls.maxDistance = 10;
+controls.zoomSpeed = 0.8;
+
+const hemi = new THREE.HemisphereLight('#bcd3ff', '#20160c', 0.7);
+scene.add(hemi);
+const key = new THREE.DirectionalLight('#fff3e0', 2.2);
+key.position.set(2.5, 4, 2);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 0.5, far: 12 });
+key.shadow.bias = -0.0005;
+scene.add(key);
+const rim = new THREE.DirectionalLight('#4fd6e8', 1.2);
+rim.position.set(-3, 2, -2.5);
+scene.add(rim);
+
+/* =====================================================================
+   3. ENVIRONMENTS
+   ===================================================================== */
+function canvasTex(draw, repeat) {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  draw(c.getContext('2d'));
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  t.repeat.set(repeat, repeat);
+  return t;
+}
+const tile = (base, line) => g => { g.fillStyle = base; g.fillRect(0, 0, 256, 256); g.strokeStyle = line; g.lineWidth = 4; g.strokeRect(0, 0, 256, 256); };
+const speckle = (base, cols, n, size) => g => {
+  g.fillStyle = base; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < n; i++) { g.fillStyle = cols[i % cols.length]; g.fillRect(Math.random() * 256, Math.random() * 256, size * Math.random() + 1, size * Math.random() + 1); }
+};
+const FLOOR_TEX = {
+  bathroom: canvasTex(tile('#1a2230', '#0f141d'), 20),
+  park:     canvasTex(speckle('#2f5a26', ['#3d7330', '#264a1f', '#4b8a39'], 2500, 5), 14),
+  campfire: canvasTex(speckle('#3a2c1e', ['#4a3826', '#2c2016', '#5a4630'], 2200, 6), 12),
+  snow:     canvasTex(speckle('#e9eef5', ['#ffffff', '#d6dfeb', '#c9d5e6'], 1800, 6), 10),
+  range:    canvasTex(tile('#2a2f38', '#20242c'), 10),
+};
+const floorMat = new THREE.MeshStandardMaterial({ map: FLOOR_TEX.bathroom, roughness: 0.4, metalness: 0.05 });
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), floorMat);
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
+scene.add(floor);
+
+const envGroups = {};
+for (const k of Object.keys(SCENARIOS)) { envGroups[k] = new THREE.Group(); envGroups[k].visible = false; scene.add(envGroups[k]); }
+const shadowed = m => { m.castShadow = m.receiveShadow = true; return m; };
+const std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.7, ...extra });
+
+/* ---- Bathroom ---- */
+const wallTex = canvasTex(tile('#1c2534', '#121924'), 1); wallTex.repeat.set(16, 4);
+const wall = new THREE.Mesh(new THREE.PlaneGeometry(8, 2.4), new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.6 }));
+wall.position.set(0, 1.2, 1.32); wall.rotation.y = Math.PI; wall.receiveShadow = true;
+envGroups.bathroom.add(wall);
+
+function buildToilet() {
+  // Modular one-piece toilet. Dimensions match the collision constants (BOWL_R, RIM_R, RIM_Y, WATER_Y, 1.2 elongation).
+  const g = new THREE.Group();
+  g.position.set(0, 0, TOILET_Z);
+  const ceramic = new THREE.MeshPhysicalMaterial({ color: '#f4f6f8', roughness: 0.07, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 1.3 });
+  const ceramicIn = ceramic.clone(); ceramicIn.side = THREE.DoubleSide; ceramicIn.color.set('#eceff3');
+  const chrome = new THREE.MeshStandardMaterial({ color: '#e3e7ec', metalness: 1, roughness: 0.1, envMapIntensity: 1.5 });
+  const seatMat = new THREE.MeshPhysicalMaterial({ color: '#fbfbfb', roughness: 0.22, clearcoat: 0.7, envMapIntensity: 1.1 });
+  const dark = new THREE.MeshBasicMaterial({ color: '#15181d' });
+  const add = (mesh, x = 0, y = 0, z = 0) => { mesh.position.set(x, y, z); g.add(shadowed(mesh)); return mesh; };
+  const lathe = (pts, mat, seg = 80) => { const m = add(new THREE.Mesh(new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg), mat)); m.scale.z = 1.2; return m; };
+
+  // Pedestal foot → waisted trapway → flared outer bowl
+  lathe([[0, 0.002], [0.125, 0.002], [0.134, 0.012], [0.126, 0.032], [0.113, 0.1], [0.112, 0.17], [0.13, 0.24],
+    [0.165, 0.31], [0.198, 0.37], [0.218, 0.405], [0.226, 0.42]], ceramic);
+  // Rolled rim
+  const rim = add(new THREE.Mesh(new THREE.TorusGeometry(0.214, 0.014, 18, 120), ceramic), 0, 0.422, 0);
+  rim.rotation.x = Math.PI / 2; rim.scale.y = 1.2;
+  // Glazed inner bowl down to the trap
+  lathe([[0.212, 0.43], [0.2, 0.415], [0.178, 0.385], [0.155, 0.35], [0.128, 0.3], [0.1, 0.265], [0.07, 0.24], [0.045, 0.228], [0, 0.224]], ceramicIn);
+  const trap = add(new THREE.Mesh(new THREE.CircleGeometry(0.042, 32), dark), 0, 0.2255, 0.03); trap.rotation.x = -Math.PI / 2; trap.scale.y = 1.25;
+  // Flush holes under the rim
+  for (let i = 0; i < 22; i++) {
+    const a = (i / 22) * Math.PI * 2;
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.0045, 6, 4), dark), Math.cos(a) * 0.198, 0.408, Math.sin(a) * 0.198 * 1.2);
+  }
+  // Rear housing, deck, tank, tank lid
+  add(new THREE.Mesh(new RoundedBoxGeometry(0.27, 0.4, 0.2, 4, 0.045), ceramic), 0, 0.2, 0.25);
+  add(new THREE.Mesh(new RoundedBoxGeometry(0.32, 0.05, 0.2, 3, 0.02), ceramic), 0, 0.44, 0.33);
+  add(new THREE.Mesh(new RoundedBoxGeometry(0.45, 0.37, 0.19, 5, 0.03), ceramic), 0, 0.65, 0.37);
+  add(new THREE.Mesh(new RoundedBoxGeometry(0.475, 0.036, 0.215, 3, 0.014), ceramic), 0, 0.852, 0.37);
+  // Flush lever
+  const esc = add(new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.01, 24), chrome), -0.17, 0.79, 0.274); esc.rotation.x = Math.PI / 2;
+  add(new THREE.Mesh(new RoundedBoxGeometry(0.075, 0.014, 0.014, 2, 0.006), chrome), -0.135, 0.79, 0.27);
+  // Bolt caps + caulk line
+  for (const s of [-1, 1]) add(new THREE.Mesh(new THREE.SphereGeometry(0.018, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), ceramic), s * 0.122, 0.01, 0.05);
+  const caulk = add(new THREE.Mesh(new THREE.TorusGeometry(0.128, 0.004, 8, 80), ceramic), 0, 0.003, 0); caulk.rotation.x = Math.PI / 2; caulk.scale.y = 1.2;
+
+  // Seat + lid (raised, hinged at the back), bevelled extrusions
+  const ellipse = (rx, rz, cz, hole) => {
+    const s = new THREE.Shape(); s.absellipse(0, cz, rx, rz, 0, Math.PI * 2, false, 0);
+    if (hole) { const h = new THREE.Path(); h.absellipse(0, hole.cz, hole.rx, hole.rz, 0, Math.PI * 2, true, 0); s.holes.push(h); }
+    return s;
+  };
+  const extrude = (shape, depth) => new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.008, bevelSegments: 4, curveSegments: 72 });
+  const seatPivot = new THREE.Group(); seatPivot.position.set(0, 0.44, 0.215); g.add(seatPivot);
+  const seat = shadowed(new THREE.Mesh(extrude(ellipse(0.2, 0.235, -0.215, { rx: 0.125, rz: 0.165, cz: -0.225 }), 0.018), seatMat));
+  seat.rotation.x = Math.PI / 2; seat.position.y = 0.024; seatPivot.add(seat);
+  seatPivot.rotation.x = 1.6;
+  const lidPivot = new THREE.Group(); lidPivot.position.set(0, 0.47, 0.228); g.add(lidPivot);
+  const lid = shadowed(new THREE.Mesh(extrude(ellipse(0.205, 0.24, -0.225), 0.016), seatMat));
+  lid.rotation.x = Math.PI / 2; lid.position.y = 0.022; lidPivot.add(lid);
+  lidPivot.rotation.x = 1.7;
+  for (const s of [-1, 1]) { const h = add(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.045, 16), chrome), s * 0.085, 0.448, 0.215); h.rotation.z = Math.PI / 2; }
+
+  // Supply line + shut-off valve to the wall
+  const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(-0.16, 0.16, 0.53), new THREE.Vector3(-0.16, 0.16, 0.47),
+    new THREE.Vector3(-0.16, 0.3, 0.45), new THREE.Vector3(-0.16, 0.455, 0.43)]);
+  add(new THREE.Mesh(new THREE.TubeGeometry(curve, 32, 0.0055, 10), chrome));
+  const valve = add(new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.05, 16), chrome), -0.16, 0.16, 0.515); valve.rotation.x = Math.PI / 2;
+  const knob = add(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.008, 20), chrome), -0.16, 0.16, 0.486); knob.rotation.x = Math.PI / 2;
+  const flange = add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.004, 24), chrome), -0.16, 0.16, 0.538); flange.rotation.x = Math.PI / 2;
+
+  // Bowl water
+  const waterMat = new THREE.MeshPhysicalMaterial({ color: '#cfeaf5', roughness: 0.0, transparent: true, opacity: 0.72, clearcoat: 1, envMapIntensity: 1.6 });
+  const water = new THREE.Mesh(new THREE.CircleGeometry(0.128, 64), waterMat);
+  water.rotation.x = -Math.PI / 2; water.position.y = WATER_Y; water.scale.y = 1.2; g.add(water);
+  return { group: g, water, waterMat, ceramic, ceramicIn, seatMat, seatPivot };
+}
+const toilet = buildToilet();
+envGroups.bathroom.add(toilet.group);
+// Overflow flood around the toilet
+const floodMat = new THREE.MeshPhysicalMaterial({ color: '#f0b84a', transparent: true, opacity: 0.62, roughness: 0.03, clearcoat: 1, polygonOffset: true, polygonOffsetFactor: -3 });
+const flood = new THREE.Mesh(new THREE.CircleGeometry(1, 64), floodMat);
+flood.rotation.x = -Math.PI / 2; flood.position.set(0, 0.003, TOILET_Z); flood.scale.setScalar(0.0001);
+envGroups.bathroom.add(flood);
+
+/* ---- Targets: anything the stream can hit ----
+   shape 'cyl' = vertical cylinder (pos is base), 'sphere' = sphere (pos is centre). */
+const targets = [];
+function addTarget(t) { t.hp = t.maxHp; t.dead = false; t.timer = 0; targets.push(t); return t; }
+
+/* ---- Park ---- */
+{
+  const g = envGroups.park;
+  const trunk = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.16, 2.4, 20), std('#5a3d26')));
+  trunk.position.set(0.3, 1.2, 1.15); g.add(trunk);
+  const leafMat = std('#2f7a35', { roughness: 0.9 });
+  for (const [x, y, z, r] of [[0.3, 2.6, 1.15, 0.8], [-0.2, 2.3, 1.1, 0.55], [0.8, 2.35, 1.2, 0.6], [0.35, 2.2, 0.7, 0.5]]) {
+    const leaf = shadowed(new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), leafMat)); leaf.position.set(x, y, z); g.add(leaf);
+  }
+  const hydrant = new THREE.Group(); hydrant.position.set(-0.6, 0, 0.9);
+  const red = std('#c92a2a', { roughness: 0.4, metalness: 0.3 });
+  const hb = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.09, 0.42, 20), red)); hb.position.y = 0.21; hydrant.add(hb);
+  const hc = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.08, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), red)); hc.position.y = 0.42; hydrant.add(hc);
+  const hn = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.24, 12), red)); hn.rotation.z = Math.PI / 2; hn.position.y = 0.3; hydrant.add(hn);
+  g.add(hydrant);
+  for (const [x, z, s] of [[-1.5, 1.6, 0.4], [1.4, 1.8, 0.5], [-1.0, -1.2, 0.35]]) {
+    const b = shadowed(new THREE.Mesh(new THREE.IcosahedronGeometry(s, 1), std('#2c6b31'))); b.position.set(x, s * 0.6, z); b.scale.y = 0.7; g.add(b);
+  }
+  addTarget({ scene: 'park', shape: 'cyl', pos: new THREE.Vector3(0.3, 0, 1.15), r: 0.15, h: 2.4, maxHp: Infinity, sound: 'floor' });
+  addTarget({ scene: 'park', shape: 'cyl', pos: new THREE.Vector3(-0.6, 0, 0.9), r: 0.1, h: 0.48, maxHp: Infinity, sound: 'ceramic' });
+}
+
+/* ---- Campfire ---- */
+const fire = (() => {
+  const g = envGroups.campfire, c = new THREE.Vector3(0, 0, 0.95);
+  const logMat = std('#4a2f1b', { roughness: 0.95 });
+  for (let i = 0; i < 4; i++) {
+    const log = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, 0.5, 10), logMat));
+    log.rotation.set(Math.PI / 2 - 0.35, (i / 4) * Math.PI * 2, 0, 'YXZ'); log.position.set(c.x, 0.1, c.z); g.add(log);
+  }
+  const stoneMat = std('#6b6f78', { roughness: 0.9 });
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2, s = shadowed(new THREE.Mesh(new THREE.DodecahedronGeometry(0.07), stoneMat));
+    s.position.set(c.x + Math.cos(a) * 0.36, 0.04, c.z + Math.sin(a) * 0.36); s.scale.y = 0.6; g.add(s);
+  }
+  const flames = new THREE.Group(); flames.position.copy(c); g.add(flames);
+  const flameMeshes = [['#ffdd55', 0.11, 0.5], ['#ff8a1f', 0.16, 0.38], ['#ff4a10', 0.2, 0.28]].map(([col, r, h], i) => {
+    const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85 - i * 0.15, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    m.position.y = 0.12 + h / 2; flames.add(m); return m;
+  });
+  const light = new THREE.PointLight('#ff8a3a', 4, 6, 1.6); light.position.set(c.x, 0.5, c.z); light.castShadow = true; g.add(light);
+  const target = addTarget({ scene: 'campfire', shape: 'sphere', pos: new THREE.Vector3(c.x, 0.22, c.z), r: 0.3, maxHp: 900, sound: 'sizzle',
+    onDestroy() { score.down++; this.timer = 7; } });
+  return { flames, flameMeshes, light, target, center: c };
+})();
+
+// Steam puffs (fire hits, slime pops)
+const steamTex = canvasTex(g => {
+  const grd = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  grd.addColorStop(0, 'rgba(255,255,255,0.9)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
+}, 1);
+const steam = Array.from({ length: 30 }, () => {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: steamTex, transparent: true, opacity: 0, depthWrite: false }));
+  s.visible = false; s.userData = { t: 1, vy: 0 }; scene.add(s); return s;
+});
+let steamCursor = 0;
+function puff(pos, color = '#dfe6ee', size = 0.25) {
+  const s = steam[steamCursor = (steamCursor + 1) % steam.length];
+  s.position.copy(pos).add(new THREE.Vector3((Math.random() - 0.5) * 0.2, 0, (Math.random() - 0.5) * 0.2));
+  s.material.color.set(color); s.userData.t = 0; s.userData.size = size; s.visible = true;
+}
+
+/* ---- Snow ---- */
+const snowman = (() => {
+  const g = envGroups.snow, grp = new THREE.Group(); grp.position.set(0, 0, 1.1); g.add(grp);
+  const snowMat = new THREE.MeshStandardMaterial({ color: '#f4f7fb', roughness: 0.8 });
+  for (const [r, y] of [[0.26, 0.24], [0.19, 0.6], [0.13, 0.88]]) { const b = shadowed(new THREE.Mesh(new THREE.SphereGeometry(r, 28, 20), snowMat)); b.position.y = y; grp.add(b); }
+  const coal = std('#111');
+  for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 8), coal); e.position.set(s * 0.045, 0.92, -0.115); grp.add(e); }
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.12, 10), std('#ff7a1a')); nose.rotation.x = -Math.PI / 2; nose.position.set(0, 0.88, -0.18); grp.add(nose);
+  const hat = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.14, 20), std('#1a1a1f'))); hat.position.y = 1.04; grp.add(hat);
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.015, 24), std('#1a1a1f')); brim.position.y = 0.975; grp.add(brim);
+  const pineMat = std('#1f4d2c', { roughness: 0.9 });
+  for (const [x, z, s] of [[-1.3, 1.9, 1], [1.5, 1.4, 1.3], [-2, -0.6, 0.9], [2.2, -1, 1.1]]) {
+    const p = shadowed(new THREE.Mesh(new THREE.ConeGeometry(0.4 * s, 1.4 * s, 12), pineMat)); p.position.set(x, 0.7 * s, z); g.add(p);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.22 * s, 0.45 * s, 12), new THREE.MeshStandardMaterial({ color: '#f4f7fb' })); cap.position.set(x, 1.25 * s, z); g.add(cap);
+  }
+  const target = addTarget({ scene: 'snow', shape: 'cyl', pos: new THREE.Vector3(0, 0, 1.1), r: 0.27, h: 1.05, maxHp: 1100, sound: 'floor',
+    onDestroy() { score.down++; this.timer = 9; } });
+  return { grp, snowMat, target };
+})();
+
+/* ---- Slime target range ---- */
+const crate = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.4), std('#7a5a36')));
+crate.position.set(0, 0.25, 1.05); envGroups.range.add(crate);
+addTarget({ scene: 'range', shape: 'cyl', pos: new THREE.Vector3(0, 0, 1.05), r: 0.24, h: 0.5, maxHp: Infinity, sound: 'floor' });
+const cans = [-0.2, -0.1, 0, 0.1, 0.2].map((x, i) => {
+  const m = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.12, 18),
+    new THREE.MeshStandardMaterial({ color: ['#d33', '#36c', '#e8b422', '#3a3', '#c3c'][i], metalness: 0.7, roughness: 0.3 })));
+  envGroups.range.add(m);
+  const home = new THREE.Vector3(x, 0.5, 1.05);
+  return addTarget({ scene: 'range', shape: 'cyl', pos: home.clone(), home, r: 0.045, h: 0.12, maxHp: 30, sound: 'ceramic', mesh: m,
+    vel: new THREE.Vector3(), spin: new THREE.Vector3(),
+    onDestroy() { score.down++; this.timer = 6; this.vel.copy(_d).multiplyScalar(1.6).add(new THREE.Vector3(0, 1.4, 0)); this.spin.set(Math.random() * 12, 0, Math.random() * 12); } });
+});
+const slimeMat = new THREE.MeshPhysicalMaterial({ color: '#58e06a', roughness: 0.15, clearcoat: 1, transparent: true, opacity: 0.88, emissive: '#1b5e24', emissiveIntensity: 0.4 });
+const slimes = Array.from({ length: 4 }, () => {
+  const g = new THREE.Group();
+  const blob = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.2, 28, 20), slimeMat)); blob.scale.y = 0.75; blob.position.y = 0.15; g.add(blob);
+  const white = new THREE.MeshBasicMaterial({ color: '#fff' }), black = new THREE.MeshBasicMaterial({ color: '#000' });
+  for (const s of [-1, 1]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 10), white); e.position.set(s * 0.07, 0.24, 0.15); g.add(e);
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.02, 10, 8), black); p.position.set(s * 0.07, 0.24, 0.185); g.add(p);
+  }
+  envGroups.range.add(g);
+  const t = addTarget({ scene: 'range', shape: 'sphere', pos: new THREE.Vector3(), r: 0.2, maxHp: 140, sound: 'water', mesh: g, slime: true,
+    popColor: '#7dff8c', onDestroy: popMonster });
+  respawnSlime(t);
+  return t;
+});
+for (const c of cans) { c.yOff = 0.06; c.rest = 0.035; }
+
+/* Rubber ducks & traffic cones: knockable props (models face -Z, toward the player) */
+function makeDuck() {
+  const g = new THREE.Group(), yellow = std('#ffd22e', { roughness: 0.35 });
+  const b = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.075, 20, 14), yellow)); b.scale.set(1, 0.75, 1.25); b.position.y = 0.06; g.add(b);
+  const h = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), yellow)); h.position.set(0, 0.13, -0.05); g.add(h);
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.04, 10), std('#ff7a1a')); beak.rotation.x = -Math.PI / 2; beak.position.set(0, 0.125, -0.1); g.add(beak);
+  for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 6), std('#111')); e.position.set(s * 0.022, 0.145, -0.088); g.add(e); }
+  return g;
+}
+function makeCone() {
+  const g = new THREE.Group();
+  const c = shadowed(new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.36, 20), std('#ff6a13', { roughness: 0.5 }))); c.position.y = 0.2; g.add(c);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.072, 0.05, 20, 1, true), std('#f4f4f4')); band.position.y = 0.17; g.add(band);
+  const base = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.025, 0.24), std('#ff6a13'))); base.position.y = 0.0125; g.add(base);
+  return g;
+}
+function knockOff() { score.down++; this.timer = 6; this.vel.copy(_d).multiplyScalar(1.6).add(new THREE.Vector3(0, 1.4, 0)); this.spin.set(Math.random() * 12, 0, Math.random() * 12); }
+const knockables = [...cans];
+for (const [fn, x, z, r, h, hp, sound] of [
+  [makeDuck, -0.7, 1.3, 0.09, 0.17, 25, 'water'], [makeDuck, 0.75, 1.25, 0.09, 0.17, 25, 'water'], [makeDuck, -1.25, 0.45, 0.09, 0.17, 25, 'water'],
+  [makeCone, 1.1, 0.6, 0.11, 0.38, 45, 'floor'], [makeCone, -1.0, 1.0, 0.11, 0.38, 45, 'floor']]) {
+  const m = fn(); envGroups.range.add(m);
+  const home = new THREE.Vector3(x, 0, z);
+  knockables.push(addTarget({ scene: 'range', shape: 'cyl', pos: home.clone(), home, r, h, maxHp: hp, sound, mesh: m, yOff: 0, rest: 0.03,
+    vel: new THREE.Vector3(), spin: new THREE.Vector3(), onDestroy: knockOff }));
+}
+
+/* "Gloops": original one-eyed horned cartoon monsters that waddle toward you */
+function makeGloop() {
+  const g = new THREE.Group();
+  const purple = new THREE.MeshPhysicalMaterial({ color: '#9b5cff', roughness: 0.35, clearcoat: 0.6, emissive: '#2a0f5c', emissiveIntensity: 0.4 });
+  const b = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.14, 0.12, 8, 20), purple)); b.position.y = 0.27; g.add(b);
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 12), new THREE.MeshBasicMaterial({ color: '#fff' })); eye.position.set(0, 0.34, 0.11); g.add(eye);
+  const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 10), new THREE.MeshBasicMaterial({ color: '#111' })); pupil.position.set(0, 0.34, 0.17); g.add(pupil);
+  const hornMat = std('#ffe2a8');
+  for (const s of [-1, 1]) {
+    const horn = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.09, 10), hornMat); horn.position.set(s * 0.07, 0.5, 0); horn.rotation.z = -s * 0.35; g.add(horn);
+    const foot = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), purple)); foot.position.set(s * 0.07, 0.03, 0.03); foot.scale.set(1, 0.6, 1.3); g.add(foot);
+    const armM = new THREE.Mesh(new THREE.CapsuleGeometry(0.022, 0.08, 4, 8), purple); armM.position.set(s * 0.16, 0.25, 0.02); armM.rotation.z = s * 0.6; g.add(armM);
+  }
+  return g;
+}
+function popMonster() { score.down++; this.timer = 2 + Math.random() * 2; for (let i = 0; i < 6; i++) puff(this.pos, this.popColor, 0.3); this.mesh.visible = false; }
+for (let i = 0; i < 2; i++) {
+  const g = makeGloop(); envGroups.range.add(g);
+  const t = addTarget({ scene: 'range', shape: 'sphere', pos: new THREE.Vector3(), r: 0.2, maxHp: 220, sound: 'water', mesh: g, slime: true,
+    baseR: 0.22, baseY: 0.27, popColor: '#c38cff', speed: 0.12, walk: true, onDestroy: popMonster });
+  respawnSlime(t); slimes.push(t);
+}
+
+function respawnSlime(t) {
+  const a = Math.random() * Math.PI * 2, r = 2.6 + Math.random() * 1.2;
+  t.mesh.position.set(Math.sin(a) * r, 0, Math.cos(a) * r);
+  t.hp = t.maxHp; t.dead = false; t.mesh.visible = true; t.mesh.scale.setScalar(1);
+}
+
+function resetTargets() {
+  for (const t of targets) { t.hp = t.maxHp; t.dead = false; t.timer = 0; }
+  for (const c of knockables) { c.pos.copy(c.home); c.mesh.position.copy(c.home).setY(c.home.y + c.yOff); c.mesh.rotation.set(0, 0, 0); }
+  slimes.forEach(respawnSlime);
+  snowman.grp.scale.set(1, 1, 1); snowman.snowMat.color.set('#f4f7fb');
+  score.hits = score.down = 0;
+}
+
+/** First target containing the point, in the active scenario. */
+function hitTarget(x, y, z) {
+  for (let i = 0; i < targets.length; i++) {
+    const t = targets[i];
+    if (t.dead || t.scene !== state.scenario) continue;
+    const p = t.pos;
+    if (t.shape === 'sphere') {
+      const dx = x - p.x, dy = y - p.y, dz = z - p.z;
+      if (dx * dx + dy * dy + dz * dz < t.r * t.r) return t;
+    } else if (y > p.y && y < p.y + t.h) {
+      const dx = x - p.x, dz = z - p.z;
+      if (dx * dx + dz * dz < t.r * t.r) return t;
+    }
+  }
+  return null;
+}
+
+function updateTargets(dt, t) {
+  // Campfire: flicker, regenerate, relight
+  const f = fire.target, fr = f.dead ? 0 : f.hp / f.maxHp;
+  if (f.dead) { f.timer -= dt; if (f.timer <= 0) { f.dead = false; f.hp = f.maxHp * 0.3; } }
+  else f.hp = Math.min(f.maxHp, f.hp + dt * 40);
+  fire.flameMeshes.forEach((m, i) => {
+    const fl = 0.85 + 0.25 * Math.sin(t * (9 + i * 3) + i) * Math.random();
+    m.scale.set(Math.max(0.01, fr) * (0.9 + 0.2 * Math.random()), Math.max(0.01, fr * fl), Math.max(0.01, fr));
+    m.rotation.y += dt * (1 + i);
+  });
+  fire.light.intensity = 4 * fr * (0.8 + 0.3 * Math.random()) + 0.05;
+  if (state.scenario === 'campfire' && f.dead && Math.random() < dt * 6) puff(new THREE.Vector3(fire.center.x, 0.2, fire.center.z), '#9aa3ad', 0.4);
+
+  // Snowman: turns yellow as it's hit, melts, rebuilds
+  const sm = snowman.target;
+  snowman.snowMat.color.set('#f4f7fb').lerp(_tmp.set('#f2dc5a'), 1 - (sm.dead ? 0 : sm.hp / sm.maxHp));
+  if (sm.dead) {
+    snowman.grp.scale.y = Math.max(0.2, snowman.grp.scale.y - dt * 0.5);
+    snowman.grp.scale.x = snowman.grp.scale.z = 1 + (1 - snowman.grp.scale.y) * 0.6;
+    snowman.snowMat.color.set('#f2dc5a');
+    sm.timer -= dt; if (sm.timer <= 0) { sm.dead = false; sm.hp = sm.maxHp; snowman.grp.scale.set(1, 1, 1); }
+  }
+
+  // Cans: knocked off with ballistic motion, then reset
+  for (const c of knockables) {
+    if (c.dead) {
+      c.vel.y -= GRAVITY * dt;
+      c.mesh.position.addScaledVector(c.vel, dt);
+      c.mesh.rotation.x += c.spin.x * dt; c.mesh.rotation.z += c.spin.z * dt;
+      if (c.mesh.position.y < c.rest) { c.mesh.position.y = c.rest; c.vel.multiplyScalar(0.4); c.vel.y = Math.abs(c.vel.y) * 0.3; c.spin.multiplyScalar(0.5); }
+      c.timer -= dt;
+      if (c.timer <= 0) { c.dead = false; c.hp = c.maxHp; c.pos.copy(c.home); c.mesh.position.copy(c.home).setY(c.home.y + c.yOff); c.mesh.rotation.set(0, 0, 0); }
+    } else {
+      c.mesh.position.set(c.home.x, c.home.y + c.yOff, c.home.z);
+      c.mesh.rotation.z = (1 - c.hp / c.maxHp) * 0.25 * Math.sin(t * 30);
+    }
+  }
+
+  // Slimes: creep toward the player, shrink when hit, pop, respawn
+  for (const s of slimes) {
+    if (s.dead) { s.timer -= dt; if (s.timer <= 0) respawnSlime(s); continue; }
+    const m = s.mesh, dist = Math.hypot(m.position.x, m.position.z);
+    if (state.scenario === 'range' && !state.dissolved && dist > 0.75) {
+      m.position.x -= (m.position.x / dist) * (s.speed || 0.18) * dt;
+      m.position.z -= (m.position.z / dist) * (s.speed || 0.18) * dt;
+    }
+    m.rotation.y = Math.atan2(-m.position.x, -m.position.z);
+    const k = 0.45 + 0.55 * (s.hp / s.maxHp), wob = 1 + 0.06 * Math.sin(t * 6 + dist * 3);
+    m.scale.set(k * wob, k / wob, k * wob);
+    if (s.walk) m.position.y = Math.abs(Math.sin(t * 8 + dist)) * 0.035;
+    s.r = (s.baseR || 0.2) * k; s.pos.set(m.position.x, (s.baseY || 0.15) * k, m.position.z);
+  }
+}
+
+/* ---- Puddle, ripples ---- */
+const puddleMat = new THREE.MeshPhysicalMaterial({ color: '#f0b84a', transparent: true, opacity: 0.55, roughness: 0.05, clearcoat: 1, polygonOffset: true, polygonOffsetFactor: -2 });
+const puddle = new THREE.Mesh(new THREE.CircleGeometry(1, 48), puddleMat);
+puddle.rotation.x = -Math.PI / 2; puddle.position.y = 0.002; puddle.scale.setScalar(0.0001);
+scene.add(puddle);
+const puddleState = { volume: 0, center: new THREE.Vector3(0, 0.002, 0.6) };
+
+const ripples = [];
+for (let i = 0; i < 28; i++) {
+  const m = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 32),
+    new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.visible = false; m.userData.t = 1;
+  scene.add(m); ripples.push(m);
+}
+let rippleCursor = 0;
+function spawnRipple(x, y, z) {
+  const r = ripples[rippleCursor = (rippleCursor + 1) % ripples.length];
+  r.position.set(x, y + 0.001, z); r.userData.t = 0; r.visible = true;
+}
+
+/* =====================================================================
+   4. HUMAN FIGURE + INTERNAL ANATOMY + PIXEL CENSOR
+   ===================================================================== */
+function makeCensorTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 8;
+  const g = c.getContext('2d');
+  const tex = new THREE.CanvasTexture(c);
+  tex.magFilter = tex.minFilter = THREE.NearestFilter; tex.colorSpace = THREE.SRGBColorSpace; tex.generateMipmaps = false;
+  tex.repaint = () => {
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+      const edge = (x === 0 || x === 7 || y === 0 || y === 7) && Math.random() < 0.6;
+      g.fillStyle = edge ? 'rgba(0,0,0,0)' : `hsl(${18 + Math.random() * 14}, ${30 + Math.random() * 25}%, ${32 + Math.random() * 38}%)`;
+      g.clearRect(x, y, 1, 1); g.fillRect(x, y, 1, 1);
+    }
+    tex.needsUpdate = true;
+  };
+  tex.repaint();
+  return tex;
+}
+
+const _hip = new THREE.Vector3(), _pq = new THREE.Quaternion(), _pe = new THREE.Euler();
+
+/* ---- Skins / costumes ---- */
+const muscleTex = canvasTex(g => {
+  g.fillStyle = '#8e2323'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 260; i++) {                              // striated muscle fibres
+    g.strokeStyle = `rgba(${150 + Math.random() * 70},${30 + Math.random() * 30},${30 + Math.random() * 25},0.7)`;
+    g.lineWidth = 1 + Math.random() * 2.5; const x = Math.random() * 256;
+    g.beginPath(); g.moveTo(x, 0); g.bezierCurveTo(x + 10, 80, x - 10, 170, x + 4, 256); g.stroke();
+  }
+  for (let i = 0; i < 14; i++) { g.fillStyle = 'rgba(235,225,205,0.55)'; g.fillRect(0, Math.random() * 256, 256, 2 + Math.random() * 3); }  // tendons
+}, 3);
+const SKIN_MATS = {
+  clay:     new THREE.MeshStandardMaterial({ color: '#b8bbc0', roughness: 0.55, metalness: 0 }),
+  muscle:   new THREE.MeshPhysicalMaterial({ map: muscleTex, roughness: 0.38, clearcoat: 0.5, sheen: 0.4, sheenColor: new THREE.Color('#ff9a8a') }),
+  skeleton: new THREE.MeshPhysicalMaterial({ color: '#9fd3ff', transparent: true, opacity: 0.1, roughness: 0.1, depthWrite: false, side: THREE.DoubleSide }),
+  gold:     new THREE.MeshStandardMaterial({ color: '#d9a73a', metalness: 1, roughness: 0.22 }),
+  chrome:   new THREE.MeshStandardMaterial({ color: '#e9edf2', metalness: 1, roughness: 0.06 }),
+  gloop:    new THREE.MeshPhysicalMaterial({ color: '#9b5cff', roughness: 0.3, clearcoat: 0.8, emissive: '#2a0f5c', emissiveIntensity: 0.45 }),
+};
+const EXPRESSIONS = {
+  neutral:     { lid: 0.25, brow: 0,     browY: 0,      mouth: 'line' },
+  happy:       { lid: 0.35, brow: -0.1,  browY: 0.004,  mouth: 'smile' },
+  relieved:    { lid: 1.45, brow: -0.15, browY: 0.006,  mouth: 'smile' },
+  surprised:   { lid: 0,    brow: 0,     browY: 0.012,  mouth: 'o' },
+  angry:       { lid: 0.6,  brow: 0.45,  browY: -0.004, mouth: 'frown' },
+  strained:    { lid: 1.2,  brow: 0.3,   browY: -0.003, mouth: 'grit' },
+  embarrassed: { lid: 0.55, brow: -0.25, browY: 0.006,  mouth: 'line', blush: true },
+};
+/* Sitting on the toilet: hip height and Mixamo bone offsets (local Euler, radians) on top of the bind pose */
+const SIT = {
+  hipY: 0.52,
+  bones: {
+    LeftUpLeg: [1.5, 0, 0.1], RightUpLeg: [1.5, 0, -0.1], LeftLeg: [-1.5, 0, 0], RightLeg: [-1.5, 0, 0],
+    LeftFoot: [0.1, 0, 0], RightFoot: [0.1, 0, 0], Spine: [0.1, 0, 0], Spine1: [0.06, 0, 0], Head: [0.1, 0, 0],
+    LeftArm: [1.3, 0, 0.35], RightArm: [1.3, 0, -0.35], LeftForeArm: [0, 0, 1.0], RightForeArm: [0, 0, -1.0],
+  },
+};
+
+/** A child of `bone` whose frame is metric and aligned with the body root (so props can be placed in metres). */
+function makeAnchor(bone, root) {
+  const a = new THREE.Group(); bone.add(a);
+  const ws = new THREE.Vector3(), wq = new THREE.Quaternion(), rq = new THREE.Quaternion();
+  bone.getWorldScale(ws); bone.getWorldQuaternion(wq); root.getWorldQuaternion(rq);
+  a.scale.set(1 / ws.x, 1 / ws.y, 1 / ws.z);
+  a.quaternion.copy(wq.invert().multiply(rq));
+  return a;
+}
+
+/* ---- Skeleton costume: skull, ribcage, pelvis ride on bone anchors; long bones are rebuilt each frame ---- */
+const boneMat = new THREE.MeshStandardMaterial({ color: '#ece3c8', roughness: 0.5 });
+const socketMat = new THREE.MeshBasicMaterial({ color: '#1a1410' });
+function buildSkeletonParts(rig) {
+  const add = (anchor, mesh, x, y, z) => { if (!anchor) return mesh; mesh.position.set(x, y, z); mesh.castShadow = true; mesh.visible = false; anchor.add(mesh); rig.skel.push(mesh); return mesh; };
+  // Skull: cranium, cheekbones, eye sockets, nasal cavity, jaw, teeth
+  const cran = add(rig.headA, new THREE.Mesh(new THREE.SphereGeometry(0.092, 28, 20), boneMat), 0, 0.11, -0.005); cran.scale.set(0.86, 1, 1.05);
+  add(rig.headA, new THREE.Mesh(new THREE.SphereGeometry(0.06, 20, 14), boneMat), 0, 0.055, 0.035).scale.set(1.15, 0.8, 0.9);
+  for (const s of [-1, 1]) add(rig.headA, new THREE.Mesh(new THREE.SphereGeometry(0.02, 14, 10), socketMat), s * 0.032, 0.095, 0.075);
+  add(rig.headA, new THREE.Mesh(new THREE.ConeGeometry(0.011, 0.025, 3), socketMat), 0, 0.068, 0.088).rotation.x = Math.PI;
+  const jaw = add(rig.headA, new THREE.Mesh(new THREE.TorusGeometry(0.042, 0.011, 8, 20, Math.PI), boneMat), 0, 0.03, 0.04); jaw.rotation.set(Math.PI / 2, 0, Math.PI);
+  add(rig.headA, new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.012, 0.012), new THREE.MeshStandardMaterial({ color: '#fbf7ea' })), 0, 0.044, 0.08);
+  // Ribcage: ribs open at the back of the sternum line, sternum, collar bones
+  for (let i = 0; i < 8; i++) {
+    const r = 0.085 + Math.sin((i / 7) * Math.PI) * 0.04;
+    const rib = add(rig.chestA, new THREE.Mesh(new THREE.TorusGeometry(r, 0.0065, 6, 32, Math.PI * 1.75), boneMat), 0, 0.2 - i * 0.03, 0);
+    rib.rotation.set(Math.PI / 2 + 0.25, 0, Math.PI / 2 + Math.PI * 0.125); rib.scale.set(1, 0.72, 1);
+  }
+  add(rig.chestA, new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.17, 0.012), boneMat), 0, 0.12, 0.085);
+  for (const s of [-1, 1]) { const c = add(rig.chestA, new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.15, 8), boneMat), s * 0.075, 0.24, 0.045); c.rotation.z = Math.PI / 2 - s * 0.15; }
+  // Pelvis: iliac wings + pubic ring + sacrum
+  for (const s of [-1, 1]) { const w = add(rig.hipA, new THREE.Mesh(new THREE.SphereGeometry(0.075, 18, 12, 0, Math.PI), boneMat), s * 0.075, 0.03, 0); w.scale.set(0.9, 1, 0.35); w.rotation.y = -s * 0.9; }
+  const ring = add(rig.hipA, new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.012, 8, 24), boneMat), 0, -0.04, 0.02); ring.rotation.x = Math.PI / 2 - 0.4; ring.scale.set(1.2, 1, 1);
+  add(rig.hipA, new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.09, 8), boneMat), 0, -0.01, -0.05).rotation.x = Math.PI;
+}
+const skeletonViz = (() => {
+  const g = new THREE.Group(); g.visible = false; scene.add(g);
+  const chains = [['Hips', 'Spine', 'Spine1', 'Spine2', 'Neck', 'Head'],
+    ['Spine2', 'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand', 'LeftHandMiddle1'], ['Spine2', 'RightShoulder', 'RightArm', 'RightForeArm', 'RightHand', 'RightHandMiddle1'],
+    ['Hips', 'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'LeftToeBase'], ['Hips', 'RightUpLeg', 'RightLeg', 'RightFoot', 'RightToeBase']];
+  const segs = [];
+  const shaftGeo = new THREE.CylinderGeometry(1, 1, 1, 10), knobGeo = new THREE.SphereGeometry(1, 12, 10);
+  for (const c of chains) for (let i = 0; i < c.length - 1; i++) {
+    const spine = c[0] === 'Hips' && c[1] === 'Spine';
+    const shaft = new THREE.Mesh(shaftGeo, boneMat), knob = new THREE.Mesh(knobGeo, boneMat);
+    shaft.castShadow = knob.castShadow = true; g.add(shaft, knob);
+    segs.push({ a: c[i], b: c[i + 1], shaft, knob, r: spine ? 0.016 : c[i].includes('Shoulder') || c[i] === 'Spine2' ? 0.009 : 0.015 });
+  }
+  let rig = null;
+  const A = new THREE.Vector3(), B = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), d = new THREE.Vector3();
+  return {
+    set(r) { rig = r; g.visible = !!r; },
+    update() {
+      if (!rig) return;
+      g.visible = body.root.visible && rig.wrap.visible;
+      for (const s of segs) {
+        const ba = rig.bones['mixamorig' + s.a], bb = rig.bones['mixamorig' + s.b];
+        if (!ba || !bb) { s.shaft.visible = s.knob.visible = false; continue; }
+        ba.bone.getWorldPosition(A); bb.bone.getWorldPosition(B);
+        d.subVectors(B, A); const len = d.length();
+        s.shaft.position.copy(A).addScaledVector(d, 0.5);
+        s.shaft.quaternion.setFromUnitVectors(up, d.normalize());
+        s.shaft.scale.set(s.r, len, s.r);
+        s.knob.position.copy(B); s.knob.scale.setScalar(s.r * 1.5);
+      }
+    },
+  };
+})();
+
+class HumanFigure {
+  constructor() {
+    this.pivot = new THREE.Group(); this.pivot.position.y = PIVOT_Y;
+    this.root = new THREE.Group(); this.root.position.y = -PIVOT_Y; this.pivot.add(this.root);
+    this.clipPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
+    this.skin = new THREE.MeshPhysicalMaterial({
+      color: SKIN_TONE, roughness: 0.55, sheen: 0.6, sheenColor: new THREE.Color('#ffd7c2'), sheenRoughness: 0.6,
+      clearcoat: 0.15, transparent: false, opacity: 1, side: THREE.DoubleSide, clippingPlanes: [],
+    });
+    const part = (geo, x, y, z, mat = this.skin, parent = this.root) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; m.renderOrder = 2;
+      parent.add(m); return m;
+    };
+    const lathe = (pts, seg = 36) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg);
+    const hairMat = new THREE.MeshStandardMaterial({ color: '#2b1d14', roughness: 0.9 });
+    const eyeWhite = new THREE.MeshStandardMaterial({ color: '#f4f1ea', roughness: 0.3 });
+    const irisMat = new THREE.MeshStandardMaterial({ color: '#3b2a1c', roughness: 0.2 });
+    const lipMat = new THREE.MeshStandardMaterial({ color: '#a5604c', roughness: 0.5 });
+
+    // --- Head module: skull + jaw, and a face group that can be re-attached to a rigged head bone ---
+    this.head = part(new THREE.SphereGeometry(0.1, 32, 24), 0, 1.665, 0); this.head.scale.set(0.88, 1.1, 0.98);
+    const jaw = part(new THREE.SphereGeometry(0.075, 24, 16), 0, 1.6, 0.022); jaw.scale.set(0.95, 0.8, 0.95);
+    this.face = new THREE.Group(); this.face.position.set(0, 1.665, 0); this.root.add(this.face);
+    const F = (geo, x, y, z, mat) => part(geo, x, y - 1.665, z, mat, this.face);
+    const blushMat = new THREE.MeshBasicMaterial({ color: '#ff6f8a', transparent: true, opacity: 0.45, depthWrite: false });
+    this.brows = []; this.lids = []; this.blush = [];
+    this.hair = F(new THREE.SphereGeometry(0.106, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.55), 0, 1.68, -0.008, hairMat);
+    this.hair.scale.set(0.92, 1.08, 1.02); this.hair.rotation.x = -0.25;
+    for (const s of [-1, 1]) {
+      F(new THREE.SphereGeometry(0.014, 12, 10), s * 0.034, 1.673, 0.08, eyeWhite);
+      F(new THREE.SphereGeometry(0.007, 10, 8), s * 0.034, 1.673, 0.093, irisMat);
+      const brow = F(new THREE.BoxGeometry(0.032, 0.006, 0.01), s * 0.035, 1.697, 0.09, hairMat); brow.rotation.z = -s * 0.12;
+      brow.userData = { side: s, y0: brow.position.y }; this.brows.push(brow);
+      const lid = F(new THREE.SphereGeometry(0.0158, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), s * 0.034, 1.673, 0.08, this.skin);
+      lid.rotation.x = 0.2; this.lids.push(lid);
+      const cheek = F(new THREE.SphereGeometry(0.016, 12, 8), s * 0.052, 1.633, 0.068, blushMat); cheek.scale.z = 0.4; this.blush.push(cheek);
+      const ear = F(new THREE.SphereGeometry(0.022, 12, 8), s * 0.09, 1.66, 0, this.skin); ear.scale.set(0.45, 1, 0.8);
+    }
+    const nose = F(new THREE.ConeGeometry(0.013, 0.038, 10), 0, 1.645, 0.097, this.skin); nose.rotation.x = Math.PI / 2;
+    const lips = F(new THREE.TorusGeometry(0.018, 0.005, 6, 16, Math.PI), 0, 1.615, 0.083, lipMat); lips.rotation.z = Math.PI;
+    const frown = F(new THREE.TorusGeometry(0.018, 0.005, 6, 16, Math.PI), 0, 1.6, 0.083, lipMat);
+    const oMouth = F(new THREE.TorusGeometry(0.011, 0.0045, 8, 18), 0, 1.607, 0.086, lipMat);
+    const line = F(new THREE.BoxGeometry(0.034, 0.005, 0.006), 0, 1.611, 0.088, lipMat);
+    const grit = F(new THREE.BoxGeometry(0.036, 0.012, 0.006), 0, 1.611, 0.088, new THREE.MeshStandardMaterial({ color: '#f2efe6', roughness: 0.3 }));
+    this.mouths = { smile: lips, frown, o: oMouth, line, grit };
+    this.neck = part(new THREE.CylinderGeometry(0.048, 0.058, 0.14, 20), 0, 1.52, 0);
+
+    // --- Trunk module: lathed torso (hips → waist → chest → shoulders) + pecs, deltoids, glutes ---
+    this.trunk = new THREE.Group(); this.root.add(this.trunk);
+    const torso = part(lathe([[0, 0.83], [0.1, 0.84], [0.15, 0.88], [0.165, 0.95], [0.155, 1.04], [0.145, 1.1], [0.155, 1.18],
+      [0.172, 1.27], [0.182, 1.36], [0.178, 1.42], [0.14, 1.47], [0.07, 1.5], [0, 1.505]], 48), 0, 0, 0, this.skin, this.trunk);
+    torso.scale.z = 0.62;
+    for (const s of [-1, 1]) {
+      const pec = part(new THREE.SphereGeometry(0.075, 20, 14), s * 0.07, 1.34, 0.05, this.skin, this.trunk); pec.scale.set(1.15, 0.75, 0.38);
+      const glute = part(new THREE.SphereGeometry(0.085, 20, 14), s * 0.065, 0.9, -0.055, this.skin, this.trunk); glute.scale.set(1, 1, 0.8);
+      part(new THREE.SphereGeometry(0.062, 20, 16), s * 0.185, 1.42, 0, this.skin, this.trunk);
+    }
+    this.bellyM = part(new THREE.SphereGeometry(0.125, 32, 24), 0, 1.04, 0.01);
+
+    // --- Limb modules: lathed, tapered segments with muscle bulges + joints ---
+    this.limbs = []; this.arms = []; this.legs = [];
+    for (const s of [-1, 1]) {
+      const leg = new THREE.Group(); leg.position.x = s * 0.09; leg.userData.side = s; this.root.add(leg); this.legs.push(leg);
+      const thigh = part(lathe([[0, 0], [0.058, 0.01], [0.07, 0.12], [0.082, 0.3], [0.085, 0.38], [0.07, 0.43], [0, 0.44]]), 0, 0.47, 0, this.skin, leg);
+      part(new THREE.SphereGeometry(0.052, 16, 12), 0, 0.48, 0.01, this.skin, leg);                       // knee
+      const shin = part(lathe([[0, 0], [0.034, 0.01], [0.038, 0.08], [0.055, 0.26], [0.05, 0.34], [0.046, 0.4], [0, 0.41]]), 0, 0.065, 0, this.skin, leg);
+      part(new THREE.SphereGeometry(0.038, 12, 10), 0, 0.075, 0, this.skin, leg);                        // ankle
+      part(new THREE.CapsuleGeometry(0.038, 0.15, 4, 12), 0, 0.035, 0.05, this.skin, leg).rotation.x = Math.PI / 2;  // foot
+      this.limbs.push(thigh, shin);
+
+      const arm = new THREE.Group(); arm.position.set(s * 0.205, 1.42, 0); arm.rotation.set(-0.05, 0, s * 0.09);
+      arm.userData.side = s; this.root.add(arm); this.arms.push(arm);
+      const upper = part(lathe([[0, -0.29], [0.038, -0.28], [0.046, -0.2], [0.05, -0.09], [0.047, -0.02], [0, 0]]), 0, 0, 0, this.skin, arm);
+      part(new THREE.SphereGeometry(0.037, 12, 10), 0, -0.29, 0, this.skin, arm);                        // elbow
+      const fore = part(lathe([[0, -0.56], [0.028, -0.55], [0.032, -0.49], [0.043, -0.37], [0.039, -0.3], [0, -0.29]]), 0, 0, 0, this.skin, arm);
+      const hand = part(new THREE.SphereGeometry(0.045, 16, 12), 0, -0.61, 0.005, this.skin, arm); hand.scale.set(0.55, 1.15, 0.95);
+      const thumb = part(new THREE.CapsuleGeometry(0.011, 0.04, 4, 8), -s * 0.012, -0.585, 0.035, this.skin, arm); thumb.rotation.x = 0.6;
+      this.limbs.push(upper, fore);
+    }
+
+    this.procObjects = this.root.children.slice();
+
+    // ---- Internal anatomy ----
+    this.organs = new THREE.Group();
+    this.root.add(this.organs);
+    const kidneyMat = new THREE.MeshStandardMaterial({ color: '#8c2f3a', roughness: 0.5 });
+    for (const s of [-1, 1]) {
+      const k = new THREE.Mesh(new THREE.SphereGeometry(0.035, 20, 16), kidneyMat);
+      k.scale.set(0.7, 1.25, 0.55); k.position.set(s * 0.075, 1.13, -0.05);
+      this.organs.add(k);
+    }
+    this.ureterMat = new THREE.MeshStandardMaterial({ color: '#e9b04a', emissive: '#e9b04a', emissiveIntensity: 0.2 });
+    for (const s of [-1, 1]) {
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(s * 0.065, 1.1, -0.04), new THREE.Vector3(s * 0.06, 1.02, -0.03),
+        new THREE.Vector3(s * 0.04, 0.96, 0.01), new THREE.Vector3(s * 0.02, 0.94, 0.04)]);
+      this.organs.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.004, 8), this.ureterMat));
+    }
+    this.bladderMat = new THREE.MeshPhysicalMaterial({
+      color: '#ffd9a8', transparent: true, opacity: 0.35, roughness: 0.2, clearcoat: 1,
+      emissive: '#4fd6e8', emissiveIntensity: 0.15, depthWrite: false,
+    });
+    this.bladder = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 28), this.bladderMat);
+    this.bladder.renderOrder = 1;
+    this.organs.add(this.bladder);
+    this.fluidMat = new THREE.MeshStandardMaterial({ color: '#f0b84a', roughness: 0.15, emissive: '#f0b84a', emissiveIntensity: 0.25 });
+    this.fluid = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 24), this.fluidMat);
+    this.organs.add(this.fluid);
+    this.urethraMat = new THREE.MeshStandardMaterial({ color: '#e9b04a', emissive: '#e9b04a', emissiveIntensity: 0.3 });
+    this.urethra = new THREE.Mesh(new THREE.BufferGeometry(), this.urethraMat);
+    this.organs.add(this.urethra);
+
+    // Exit point anchor + pixel-mosaic censor (no anatomy is modelled underneath)
+    this.origin = new THREE.Object3D();
+    this.root.add(this.origin);
+    this.censorTex = makeCensorTexture();
+    this.censor = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.censorTex, transparent: true }));
+    this.censor.scale.set(0.13, 0.15, 1);
+    this.censor.position.set(0, -0.02, 0.02);
+    this.censor.renderOrder = 4;
+    this.origin.add(this.censor);
+    this._lastWeight = -1; this._censorT = 0;
+  }
+
+  update(dt, t) {
+    const dry = 0.78 + 0.22 * state.bodyWater;         // dehydration makes the figure leaner
+    const wf = (0.85 + 0.45 * state.weight) * dry;
+    const wa = 0.8 + 0.55 * state.waist;
+    const lf = (0.85 + 0.5 * state.weight) * dry;
+    const ws = 0.92 + 0.14 * wa;
+    this.trunk.scale.set(wf * ws, 1, wf * ws);
+    for (const a of this.arms) a.position.x = a.userData.side * 0.205 * wf * ws;
+    for (const l of this.legs) l.position.x = l.userData.side * 0.09 * (0.6 + 0.4 * wf);
+    for (const l of this.limbs) { l.scale.x = l.scale.z = lf; }
+    const bz = 0.85 * (0.45 + 1.1 * state.belly + 0.25 * state.hydration + 0.15 * state.fill) * wf;
+    this.bellyM.scale.set(0.95 * wa * wf, 0.9, bz);
+
+    const vol = 30 + state.fill * CAPACITY_ML;
+    const r = Math.cbrt((3 * vol) / (4 * Math.PI)) / 100 * 1.15;
+    this.bladder.scale.set(r * 1.1, r * 0.9, r);
+    this.bladder.position.set(0, 0.875 + r * 0.9, 0.05);
+    this.fluid.scale.set(r * 1.0, r * 0.8, r * 0.9);
+    this.fluid.position.copy(this.bladder.position);
+
+    const urge = THREE.MathUtils.smoothstep(state.fill, 0.4, 1);
+    const glow = new THREE.Color('#4fd6e8').lerp(new THREE.Color('#ffb020'), Math.min(1, urge * 1.6))
+      .lerp(new THREE.Color('#ff3040'), Math.max(0, urge * 2 - 1));
+    this.bladderMat.emissive.copy(glow);
+    this.bladderMat.emissiveIntensity = 0.15 + urge * 0.9 * (state.fill > 0.9 ? 0.7 + 0.3 * Math.sin(t * 8) : 1);
+    this.bladderMat.opacity = 0.25 + 0.35 * urge;
+    this.ureterMat.emissiveIntensity = 0.15 + 0.25 * (0.5 + 0.5 * Math.sin(t * 3));
+    this.urethraMat.emissiveIntensity = 0.25 + 1.2 * sim.env;
+
+    const hip = this.hipLocal(_hip);
+    const oz = (this.model ? 0.1 : 0.08) * wf * (0.92 + 0.14 * wa) + 0.012;
+    if (this.sitting) this.origin.position.set(hip.x, hip.y - 0.1, hip.z + 0.05);
+    else this.origin.position.set(hip.x, hip.y - (this.model ? 0.13 : 0.11), hip.z + oz);
+    this.organs.position.set(hip.x, hip.y - 0.97, hip.z);
+    this.bellyM.position.set(hip.x, hip.y + 0.07, hip.z + 0.01);
+    if (this.rig) {
+      const g = this.sitting ? 1 : wf * (0.92 + 0.14 * wa);
+      this.rig.wrap.scale.set(g, 1, g);
+      this.rig.wrap.position.y = this.sitting ? SIT.hipY - this.rig.hipY0 : 0;
+      if (!state.dissolved) this.mixer.update(dt);
+      if (this.sitting) this.poseBones(SIT.bones);
+    }
+    this.updateFace(dt, t);
+    if (Math.abs(wf - this._lastWeight) > 0.002) {
+      this._lastWeight = wf;
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, 0.89, 0.05), new THREE.Vector3(0, 0.86, 0.06 + oz * 0.3),
+        new THREE.Vector3(0, 0.855, oz * 0.8), new THREE.Vector3(0, 0.88, oz)]);
+      this.urethra.geometry.dispose();
+      this.urethra.geometry = new THREE.TubeGeometry(curve, 16, 0.0035, 8);
+    }
+
+    // Skin: opacity (X-ray) + dissolving into urine
+    const k = sim.dissolve;
+    this.skin.opacity = state.skin;
+    const transparent = state.skin < 0.99 || k > 0.05;
+    if (transparent !== this.skin.transparent) { this.skin.transparent = transparent; this.skin.needsUpdate = true; }
+    this.skin.depthWrite = !transparent;
+    if (k > 0) this.skin.opacity = Math.min(state.skin, 1 - k * 0.6);
+    this.skin.color.copy(SKIN_TONE).lerp(urineColor, Math.max(1 - state.bodyWater, 0) * 0.35 + k * 0.65);
+    this.root.scale.set(1 + 0.8 * k, Math.max(0.02, 1 - 0.98 * k), 1 + 0.8 * k);
+    this.root.visible = k < 0.995;
+    this.pivot.rotation.set(state.flip, state.yaw, state.roll, 'YXZ');
+
+    // Censor mosaic shimmer
+    this._censorT += dt;
+    if (this._censorT > 0.14) { this._censorT = 0; this.censorTex.repaint(); }
+    this.censor.visible = !this.sitting && (state.skin > 0.3 || state.view === 'cross');
+    // Organs only show when you can see inside (otherwise they can poke through the rig in some poses)
+    this.organs.visible = !this.rig || state.skin < 0.99 || state.skinStyle === 'skeleton' || state.view === 'cross';
+  }
+
+  setCrossSection(on) {
+    for (const m of [this.skin, ...Object.values(SKIN_MATS)]) { m.clippingPlanes = on ? [this.clipPlane] : []; m.needsUpdate = true; }
+  }
+
+  /** Stream direction in world space: aim in the body frame (or straight down when sitting), rotated by the body. */
+  getDirection(out) {
+    if (this.sitting) out.set(0, -0.96, 0.22);
+    else out.set(0, Math.sin(state.aim), Math.cos(state.aim));
+    return out.applyQuaternion(this.pivot.quaternion).normalize();
+  }
+
+  /** Hip position in root space (rig bone, bounding-box estimate for custom models, or the procedural pelvis). */
+  hipLocal(out) {
+    if (this.hips) return this.root.worldToLocal(this.hips.getWorldPosition(out));
+    if (this.rig) return out.set(0, this.rig.height * 0.53 + this.rig.wrap.position.y, 0);
+    return out.set(0, 0.97, 0);
+  }
+
+  /** Load a rigged glTF character into a hidden "rig" slot (male / female / custom). */
+  loadRig(key, urls, i = 0, onDone) {
+    if (i >= urls.length) { onDone?.(null); return; }
+    new GLTFLoader().load(urls[i], gltf => {
+      const model = gltf.scene;
+      model.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(model), h = (box.max.y - box.min.y) || 1;
+      const height = key === 'female' ? 1.68 : 1.8, k = height / h;
+      model.scale.multiplyScalar(k);
+      model.position.set(-(box.min.x + box.max.x) / 2 * k, -box.min.y * k, -(box.min.z + box.max.z) / 2 * k);
+      const wrap = new THREE.Group(); wrap.add(model); wrap.visible = false; this.root.add(wrap);
+      const rig = { key, wrap, model, height, meshes: [], bones: {}, clips: gltf.animations, mixer: new THREE.AnimationMixer(model),
+        hips: model.getObjectByName('mixamorigHips'), head: model.getObjectByName('mixamorigHead'), skel: [] };
+      model.traverse(o => {
+        if (o.isMesh) { o.castShadow = o.receiveShadow = true; o.frustumCulled = false; o.renderOrder = 2; rig.meshes.push({ mesh: o, orig: o.material }); }
+        if (o.isBone) rig.bones[o.name] = { bone: o, bind: o.quaternion.clone() };
+      });
+      this.pivot.updateMatrixWorld(true);
+      rig.hipY0 = rig.hips ? this.root.worldToLocal(rig.hips.getWorldPosition(new THREE.Vector3())).y : height * 0.53;
+      // Body-aligned metric anchors on key bones: face + skull on the head, ribcage on the chest, pelvis on the hips
+      const anchor = name => { const b = model.getObjectByName(name); return b ? makeAnchor(b, this.root) : null; };
+      rig.headA = anchor('mixamorigHead'); rig.chestA = anchor('mixamorigSpine1'); rig.hipA = anchor('mixamorigHips');
+      buildSkeletonParts(rig);
+      this.rigs[key] = rig;
+      onDone?.(rig);
+    }, undefined, () => this.loadRig(key, urls, i + 1, onDone));
+  }
+
+  /** Show one rig, hide the others and the procedural mannequin. */
+  activate(key) {
+    const rig = this.rigs[key]; if (!rig) return false;
+    for (const r of Object.values(this.rigs)) r.wrap.visible = r === rig;
+    this.rig = rig; this.model = rig.model; this.hips = rig.hips; this.mixer = rig.mixer;
+    for (const o of this.procObjects) if (o !== this.bellyM && o !== this.face) o.visible = false;
+    this.sitting = key === 'female';
+    this.bellyM.visible = !this.sitting;
+    if (rig.headA && !this.sitting) { rig.headA.add(this.face); this.face.position.set(...FACE_ON_RIG.pos); this.face.scale.setScalar(FACE_ON_RIG.scale); }
+    this.applySkin(); this.applyPose();
+    this._lastWeight = -1;
+    return true;
+  }
+
+  applySkin() {
+    const rig = this.rig; if (!rig) return;
+    const style = state.skinStyle;
+    for (const { mesh, orig } of rig.meshes) mesh.material = style === 'skin' ? (rig.key === 'male' ? this.skin : orig) : SKIN_MATS[style];
+    for (const p of rig.skel) p.visible = style === 'skeleton';
+    this.bellyM.material = style === 'skin' ? this.skin : SKIN_MATS[style];
+    skeletonViz.set(style === 'skeleton' ? rig : null);
+    this.face.visible = !this.sitting && !!rig.headA && style !== 'skeleton';
+  }
+
+  applyPose() {
+    const rig = this.rig; if (!rig) return;
+    rig.mixer.stopAllAction();
+    for (const { bone, bind } of Object.values(rig.bones)) bone.quaternion.copy(bind);
+    if (this.sitting) return;                                  // sitting is posed procedurally every frame
+    const clip = rig.clips.find(c => c.name === state.pose) || rig.clips.find(c => c.name === 'idle') || rig.clips[0];
+    if (clip) rig.mixer.clipAction(clip).reset().fadeIn(0.25).play();
+  }
+
+  /** Bone offsets on top of the bind pose (used for sitting on the toilet). */
+  poseBones(offsets) {
+    for (const [name, e] of Object.entries(offsets)) {
+      const b = this.rig.bones['mixamorig' + name]; if (!b) continue;
+      b.bone.quaternion.copy(b.bind).multiply(_pq.setFromEuler(_pe.set(e[0], e[1], e[2])));
+    }
+  }
+
+  /** Facial expression: eyelids, brows, mouth shape, blush, with natural blinking. */
+  updateFace(dt, t) {
+    if (!this.face.visible) return;
+    let name = state.expression;
+    if (name === 'auto') {
+      name = state.dissolved || sim.submerged > 0 || state.bodyWater < 0.3 ? 'surprised'
+        : sim.env > 0.3 ? (state.overdrive ? 'happy' : 'relieved')
+        : state.fill > 0.92 ? 'strained' : state.fill > 0.75 ? 'embarrassed' : state.hydration > 0.75 ? 'happy' : 'neutral';
+    }
+    const ex = EXPRESSIONS[name] || EXPRESSIONS.neutral;
+    this._blink = (this._blink ?? 3) - dt;
+    if (this._blink < -0.13) this._blink = 2.5 + Math.random() * 3;
+    const lid = this._blink < 0 ? 1.5 : ex.lid;
+    const f = Math.min(1, dt * 12);
+    for (const l of this.lids) l.rotation.x += (THREE.MathUtils.lerp(0.2, 1.55, Math.min(1, lid / 1.5)) - l.rotation.x) * f;
+    for (const b of this.brows) {
+      const s = b.userData.side;
+      b.rotation.z += ((-s * (0.12 - ex.brow)) - b.rotation.z) * f;
+      b.position.y += ((b.userData.y0 + ex.browY) - b.position.y) * f;
+    }
+    for (const [k, m] of Object.entries(this.mouths)) m.visible = k === ex.mouth;
+    for (const c of this.blush) c.visible = !!ex.blush;
+  }
+}
+const body = new HumanFigure();
+scene.add(body.pivot);
+window.hydrosim = { body, state, sim, THREE, SIT };   // handy for debugging in the console
+body.rigs = {};
+body.loadRig('male', HUMAN_MODEL_URLS, 0, rig => {
+  if (rig && state.figure === 'male') body.activate('male');
+  document.getElementById('modelNote').textContent = rig ? '' : 'Could not load the rigged body: using the built-in mannequin.';
+});
+
+/* ---- The Pee Ball (what's left after Overdrive drains you) ---- */
+const peeBall = (() => {
+  const g = new THREE.Group(); g.visible = false; scene.add(g);
+  const mat = new THREE.MeshPhysicalMaterial({ color: '#f0b84a', roughness: 0.04, clearcoat: 1, transparent: true, opacity: 0.86, emissive: '#7a5410', emissiveIntensity: 0.3 });
+  const ball = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.34, 48, 32), mat)); ball.position.y = 0.34; g.add(ball);
+  const white = new THREE.MeshBasicMaterial({ color: '#fff' }), black = new THREE.MeshBasicMaterial({ color: '#111' });
+  for (const s of [-1, 1]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 12), white); e.position.set(s * 0.11, 0.46, 0.27); g.add(e);
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 10), black); p.position.set(s * 0.11, 0.46, 0.325); g.add(p);
+  }
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.012, 8, 20, Math.PI), black);
+  mouth.position.set(0, 0.36, 0.32); mouth.rotation.z = Math.PI; g.add(mouth);
+  return { group: g, ball, mat };
+})();
+
+/* =====================================================================
+   5. PARTICLE FLUID SYSTEM
+   ===================================================================== */
+const particleVS = /* glsl */`
+  attribute float aSize; attribute float aAlpha;
+  uniform float uScale; varying float vAlpha;
+  void main() {
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = aSize * uScale / -mv.z;
+    gl_Position = projectionMatrix * mv;
+    vAlpha = aAlpha;
+  }`;
+const particleFS = /* glsl */`
+  uniform vec3 uColor; varying float vAlpha;
+  void main() {
+    vec2 c = gl_PointCoord - 0.5; float d = length(c);
+    if (d > 0.5) discard;
+    float a = smoothstep(0.5, 0.15, d) * vAlpha;
+    float spec = pow(max(0.0, 1.0 - length(c - vec2(-0.16, -0.16)) * 4.0), 3.0);
+    vec3 col = uColor * (0.7 + 0.6 * (0.5 - d)) + vec3(0.9) * spec * 0.6;
+    gl_FragColor = vec4(col, a);
+    #include <colorspace_fragment>
+  }`;
+
+class ParticlePool {
+  constructor(max, uniforms) {
+    this.max = max; this.cursor = 0;
+    this.pos = new Float32Array(max * 3);
+    this.vel = new Float32Array(max * 3);
+    this.life = new Float32Array(max);
+    this.size = new Float32Array(max);
+    this.alpha = new Float32Array(max);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('aSize', new THREE.BufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('aAlpha', new THREE.BufferAttribute(this.alpha, 1).setUsage(THREE.DynamicDrawUsage));
+    this.geo = geo;
+    this.points = new THREE.Points(geo, new THREE.ShaderMaterial({
+      uniforms, vertexShader: particleVS, fragmentShader: particleFS, transparent: true, depthWrite: false,
+    }));
+    this.points.frustumCulled = false;
+    this.points.renderOrder = 3;
+  }
+  spawn(x, y, z, vx, vy, vz, size, life, alpha = 0.95) {
+    const i = this.cursor; this.cursor = (i + 1) % this.max;
+    const k = i * 3;
+    this.pos[k] = x; this.pos[k + 1] = y; this.pos[k + 2] = z;
+    this.vel[k] = vx; this.vel[k + 1] = vy; this.vel[k + 2] = vz;
+    this.size[i] = size; this.life[i] = life; this.alpha[i] = alpha;
+  }
+  /** Ballistic integration; onHit(i, surface) for ground/bowl, onTarget(i, target) for objects. */
+  update(dt, drag, onHit, onTarget) {
+    const { pos, vel, life, alpha } = this;
+    for (let i = 0; i < this.max; i++) {
+      if (life[i] <= 0) { alpha[i] = 0; continue; }
+      life[i] -= dt;
+      const k = i * 3;
+      vel[k + 1] -= GRAVITY * dt;
+      if (drag) { const f = 1 - drag * dt; vel[k] *= f; vel[k + 2] *= f; }
+      pos[k] += vel[k] * dt; pos[k + 1] += vel[k + 1] * dt; pos[k + 2] += vel[k + 2] * dt;
+      if (onTarget) { const tg = hitTarget(pos[k], pos[k + 1], pos[k + 2]); if (tg) { onTarget(i, tg); alpha[i] = 0; continue; } }
+      const s = surfaceAt(pos[k], pos[k + 2]);
+      if (pos[k + 1] <= s.y) { pos[k + 1] = s.y; onHit(i, s); }
+      if (life[i] <= 0) alpha[i] = 0;
+    }
+    this.geo.attributes.position.needsUpdate = true;
+    this.geo.attributes.aSize.needsUpdate = true;
+    this.geo.attributes.aAlpha.needsUpdate = true;
+  }
+}
+
+const _surf = { y: 0, type: 'floor', bowl: false, flood: false };
+function surfaceAt(x, z) {
+  _surf.bowl = _surf.flood = false;
+  if (state.scenario === 'bathroom') {
+    if (state.surface !== 'floor') {
+      const r = Math.hypot(x, (z - TOILET_Z) / 1.2);
+      if (r < BOWL_R) {
+        const wet = state.surface === 'water' || state.bowl > 30;
+        _surf.y = wet ? bowlLevel() : DRY_Y; _surf.type = wet ? 'water' : 'ceramic'; _surf.bowl = true; return _surf;
+      }
+      if (r < RIM_R) { _surf.y = RIM_Y; _surf.type = 'ceramic'; return _surf; }
+    }
+    if (state.flood > 50 && Math.hypot(x, z - TOILET_Z) < floodRadius()) { _surf.y = 0.003; _surf.type = 'water'; _surf.flood = true; return _surf; }
+  }
+  _surf.y = 0; _surf.type = 'floor'; return _surf;
+}
+
+const fluidUniforms = { uColor: { value: new THREE.Color('#f0b84a') }, uScale: { value: 1 } };
+const stream = new ParticlePool(7000, fluidUniforms);
+const splash = new ParticlePool(3500, fluidUniforms);
+scene.add(stream.points, splash.points);
+
+const IMPACT_TYPES = ['water', 'ceramic', 'floor', 'sizzle'];
+const impacts = { water: 0, ceramic: 0, floor: 0, sizzle: 0 };
+const impactCentroid = new THREE.Vector3(0, 0.3, TOILET_Z);
+const _accum = new THREE.Vector3(); let _accumN = 0;
+let emitAcc = 0;
+const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _v = new THREE.Vector3();
+
+function splashAt(x, y, z, vx, vz, speed, type, count) {
+  for (let j = 0; j < count; j++) {
+    const a = Math.random() * Math.PI * 2;
+    let h, up;
+    if (type === 'water')        { h = 0.15 + Math.random() * 0.35; up = 0.6 + Math.random() * 1.0; }
+    else if (type === 'ceramic') { h = 0.4 + Math.random() * 0.6;  up = 0.3 + Math.random() * 0.8; }
+    else                         { h = 0.5 + Math.random() * 0.8;  up = 0.15 + Math.random() * 0.5; }
+    const sf = 0.25 + speed * 0.18;
+    splash.spawn(x, y + 0.004, z, Math.cos(a) * h * sf + vx * 0.1, up * sf, Math.sin(a) * h * sf + vz * 0.1,
+      0.004 + Math.random() * 0.006, 0.6, 0.85);
+  }
+}
+
+function onStreamHit(i, s) {
+  const k = i * 3, p = stream.pos, v = stream.vel;
+  const x = p[k], y = p[k + 1], z = p[k + 2];
+  impacts[s.type]++;
+  _accum.x += x; _accum.y += y; _accum.z += z; _accumN++;
+  const speed = Math.hypot(v[k], v[k + 1], v[k + 2]);
+  splashAt(x, y, z, v[k], v[k + 2], speed, s.type, Math.random() < 0.45 ? 1 + (Math.random() * 3 | 0) : 0);
+  if (s.type === 'water' && Math.random() < 0.06) spawnRipple(x, y, z);
+  if (s.type === 'floor') {
+    puddleState.volume += 0.05;
+    puddleState.center.lerp(_o.set(x, 0.002, z), 0.02);
+  }
+  if (state.scenario === 'bathroom' && (s.bowl || s.type === 'ceramic')) sim.stain = Math.min(0.75, sim.stain + sim.mlPerParticle / 1500);
+  if (s.bowl) state.bowl += sim.mlPerParticle;          // each particle carries its share of the flow
+  else if (s.flood) state.flood += sim.mlPerParticle;
+  stream.life[i] = 0;
+}
+function onStreamTarget(i, t) {
+  const k = i * 3, p = stream.pos, v = stream.vel;
+  impacts[t.sound]++;
+  _accum.x += p[k]; _accum.y += p[k + 1]; _accum.z += p[k + 2]; _accumN++;
+  if (Math.random() < 0.5) {
+    // bounce some spray back off the object
+    splash.spawn(p[k], p[k + 1], p[k + 2], -v[k] * 0.15 + (Math.random() - 0.5) * 0.6, 0.3 + Math.random() * 0.8,
+      -v[k + 2] * 0.15 + (Math.random() - 0.5) * 0.6, 0.004 + Math.random() * 0.005, 0.6, 0.85);
+  }
+  if (t.sound === 'sizzle' && Math.random() < 0.05) puff(_v.set(p[k], p[k + 1] + 0.1, p[k + 2]));
+  if (t.maxHp !== Infinity) {
+    t.hp -= 1 + sim.pressure;      // stronger stream = more "damage"
+    score.hits++;
+    if (t.hp <= 0 && !t.dead) { t.dead = true; t.onDestroy?.call(t); }
+  }
+  stream.life[i] = 0;
+}
+function onSplashHit(i) { splash.life[i] = 0; }
+
+function emitStream(dt) {
+  if (sim.env < 0.01 || sim.pressure < 0.005 || state.dissolved) return;
+  body.origin.getWorldPosition(_o);
+  body.getDirection(_d);
+  const p = sim.pressure, speed = sim.speed;
+  const spread = 0.015 + 0.06 * (1 - Math.min(1, p));
+  const rate = 300 + 1600 * Math.min(1.6, p);
+  sim.mlPerParticle = (sim.flow * VOID_SPEED) / rate;
+  emitAcc += rate * dt;
+  while (emitAcc >= 1) {
+    emitAcc--;
+    const vx = _d.x * speed + (Math.random() - 0.5) * spread * speed;
+    const vy = _d.y * speed + (Math.random() - 0.5) * spread * speed;
+    const vz = _d.z * speed + (Math.random() - 0.5) * spread * speed;
+    const t0 = Math.random() * dt;
+    stream.spawn(_o.x + vx * t0 + (Math.random() - 0.5) * 0.003, _o.y + vy * t0 - 0.5 * GRAVITY * t0 * t0, _o.z + vz * t0,
+      vx, vy - GRAVITY * t0, vz, 0.009 + Math.random() * 0.007 * (0.5 + Math.min(1, p)), 3);
+  }
+}
+
+/* =====================================================================
+   6. WEB AUDIO ENGINE
+   ===================================================================== */
+function createPinkNoiseBuffer(ctx, seconds = 4) {
+  const len = ctx.sampleRate * seconds;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+  for (let i = 0; i < len; i++) {
+    const w = Math.random() * 2 - 1;
+    b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759;
+    b2 = 0.969 * b2 + w * 0.153852;    b3 = 0.8665 * b3 + w * 0.3104856;
+    b4 = 0.55 * b4 + w * 0.5329522;    b5 = -0.7616 * b5 - w * 0.016898;
+    d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
+    b6 = w * 0.115926;
+  }
+  const fade = Math.floor(ctx.sampleRate * 0.02);
+  for (let i = 0; i < fade; i++) { const a = i / fade; d[i] = d[i] * a + d[len - fade + i] * (1 - a); }
+  return buf;
+}
+
+const SURFACE_PROFILES = {
+  ceramic: { bedType: 'bandpass', bedFreq: 3200, bedQ: 5,   bedLevel: 0.28, blipRate: 0.12 },
+  water:   { bedType: 'bandpass', bedFreq: 850,  bedQ: 1.1, bedLevel: 0.45, blipRate: 0.10 },
+  floor:   { bedType: 'lowpass',  bedFreq: 2200, bedQ: 0.6, bedLevel: 0.6,  blipRate: 0.08 },
+  sizzle:  { bedType: 'highpass', bedFreq: 3800, bedQ: 0.7, bedLevel: 0.8,  blipRate: 0.12 },
+};
+
+class LiquidAudioEngine {
+  constructor(listener, streamAudio, splashAudio) {
+    this.listener = listener; this.ctx = listener.context;
+    this.streamAudio = streamAudio; this.splashAudio = splashAudio;
+    this.started = false; this.blipAcc = 0;
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 1024; this.analyser.smoothingTimeConstant = 0.75;
+    listener.getInput().connect(this.analyser);
+    this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
+    this.timeData = new Uint8Array(this.analyser.fftSize);
+  }
+
+  async unlock() {
+    if (this.ctx.state !== 'running') { try { await this.ctx.resume(); } catch (e) { /* ignored */ } }
+    if (this.started) return;
+    this.started = true;
+    const ctx = this.ctx;
+    this.noise = createPinkNoiseBuffer(ctx);
+
+    this.sSrc = ctx.createBufferSource(); this.sSrc.buffer = this.noise; this.sSrc.loop = true;
+    this.sHP = ctx.createBiquadFilter(); this.sHP.type = 'highpass'; this.sHP.frequency.value = 350;
+    this.sBP = ctx.createBiquadFilter(); this.sBP.type = 'bandpass'; this.sBP.frequency.value = 1800; this.sBP.Q.value = 0.9;
+    this.sFlutter = ctx.createGain(); this.sFlutter.gain.value = 0.8;
+    this.sOut = ctx.createGain(); this.sOut.gain.value = 0;
+    this.lfo = ctx.createOscillator(); this.lfo.frequency.value = 6;
+    const lfoAmp = ctx.createGain(); lfoAmp.gain.value = 0.22;
+    const lfoFreq = ctx.createGain(); lfoFreq.gain.value = 220;
+    this.lfo.connect(lfoAmp).connect(this.sFlutter.gain);
+    this.lfo.connect(lfoFreq).connect(this.sBP.frequency);
+    this.sSrc.connect(this.sHP).connect(this.sBP).connect(this.sFlutter).connect(this.sOut);
+    this.streamAudio.setNodeSource(this.sOut);
+
+    this.pSrc = ctx.createBufferSource(); this.pSrc.buffer = this.noise; this.pSrc.loop = true;
+    this.pFilter = ctx.createBiquadFilter(); this.pFilter.type = 'bandpass';
+    this.pBed = ctx.createGain(); this.pBed.gain.value = 0;
+    this.bus = ctx.createGain(); this.bus.gain.value = 1;
+    this.pSrc.connect(this.pFilter).connect(this.pBed).connect(this.bus);
+    this.splashAudio.setNodeSource(this.bus);
+
+    this.sSrc.start(); this.pSrc.start(0, 1.7); this.lfo.start();
+  }
+
+  blip(type, amp) {
+    const ctx = this.ctx, t = ctx.currentTime + Math.random() * 0.012, pitch = state.pitch;
+    const g = ctx.createGain(); g.connect(this.bus);
+    g.gain.setValueAtTime(0.0001, t);
+    if (type === 'ceramic') {
+      const o = ctx.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime((2200 + Math.random() * 2200) * pitch, t);
+      const dur = 0.04 + Math.random() * 0.05;
+      g.gain.exponentialRampToValueAtTime(0.22 * amp, t + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); o.start(t); o.stop(t + dur + 0.02);
+    } else if (type === 'water') {
+      const o = ctx.createOscillator(); o.type = 'sine';
+      const f0 = (380 + Math.random() * 900) * pitch, dur = 0.03 + Math.random() * 0.05;
+      o.frequency.setValueAtTime(f0, t);
+      o.frequency.exponentialRampToValueAtTime(f0 * (1.8 + Math.random()), t + dur);
+      g.gain.exponentialRampToValueAtTime(0.25 * amp, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); o.start(t); o.stop(t + dur + 0.02);
+    } else {
+      const sizzle = type === 'sizzle';
+      const s = ctx.createBufferSource(); s.buffer = this.noise;
+      const f = ctx.createBiquadFilter(); f.type = sizzle ? 'highpass' : 'bandpass'; f.Q.value = sizzle ? 0.7 : 1.4;
+      f.frequency.value = (sizzle ? 2600 + Math.random() * 2500 : 700 + Math.random() * 1800) * pitch;
+      const dur = sizzle ? 0.08 + Math.random() * 0.12 : 0.045;
+      g.gain.exponentialRampToValueAtTime((sizzle ? 0.4 : 0.5) * amp, t + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      s.connect(f).connect(g); s.start(t, Math.random() * 3, dur + 0.02);
+    }
+  }
+
+  flush() {
+    if (!this.started) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const s = ctx.createBufferSource(); s.buffer = this.noise;
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 3;
+    f.frequency.setValueAtTime(200, t); f.frequency.exponentialRampToValueAtTime(2400, t + 0.6); f.frequency.exponentialRampToValueAtTime(260, t + 3);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(1.4, t + 0.25); g.gain.exponentialRampToValueAtTime(0.0001, t + 3.2);
+    s.connect(f).connect(g).connect(this.bus); s.start(t, 0, 3.4);
+  }
+
+  /** Cartoon "bloop" for dissolving / respawning. */
+  gloop(up = false) {
+    if (!this.started) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    for (let i = 0; i < 5; i++) {
+      const o = ctx.createOscillator(), g = ctx.createGain(), t0 = t + i * 0.12;
+      o.type = 'sine';
+      const a = up ? 120 + i * 60 : 600 - i * 90, b = up ? a * 3 : a * 0.3;
+      o.frequency.setValueAtTime(a, t0); o.frequency.exponentialRampToValueAtTime(b, t0 + 0.18);
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.4, t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.2);
+      o.connect(g).connect(this.listener.getInput()); o.start(t0); o.stop(t0 + 0.25);
+    }
+  }
+
+  update(dt) {
+    this.listener.setMasterVolume(state.muted ? 0 : state.volume);
+    if (!this.started) return;
+    const now = this.ctx.currentTime, p = Math.min(1.3, sim.pressure), env = sim.env;
+    this.sOut.gain.setTargetAtTime(env * (0.1 + 0.32 * p), now, 0.05);
+    this.sBP.frequency.setTargetAtTime(1100 + 2900 * p, now, 0.08);
+    this.sBP.Q.setTargetAtTime(0.7 + 1.2 * p, now, 0.1);
+    this.sSrc.playbackRate.setTargetAtTime(0.75 + 0.55 * p, now, 0.1);
+    this.lfo.frequency.setTargetAtTime(3 + 9 * p, now, 0.2);
+
+    let total = 0, dom = null, best = 0;
+    for (const k of IMPACT_TYPES) { total += impacts[k]; if (impacts[k] > best) { best = impacts[k]; dom = k; } }
+    if (!dom) dom = state.scenario === 'bathroom' ? state.surface : 'floor';
+    const rate = total / Math.max(dt, 1e-3);
+    const prof = SURFACE_PROFILES[dom];
+    this.pFilter.type = prof.bedType;
+    this.pFilter.frequency.setTargetAtTime(prof.bedFreq * state.pitch, now, 0.1);
+    this.pFilter.Q.setTargetAtTime(prof.bedQ, now, 0.1);
+    this.pBed.gain.setTargetAtTime(Math.min(1, rate / 900) * prof.bedLevel, now, 0.06);
+
+    this.blipAcc += Math.min(55, rate * prof.blipRate * 0.1) * dt;
+    while (this.blipAcc >= 1) {
+      this.blipAcc--;
+      let r = Math.random() * total, type = dom;
+      for (const k of IMPACT_TYPES) { if (r < impacts[k]) { type = k; break; } r -= impacts[k]; }
+      this.blip(type, 0.5 + Math.random() * 0.5);
+    }
+  }
+
+  levels() {
+    this.analyser.getByteFrequencyData(this.freqData);
+    this.analyser.getByteTimeDomainData(this.timeData);
+    let sum = 0;
+    for (let i = 0; i < this.timeData.length; i++) { const v = (this.timeData[i] - 128) / 128; sum += v * v; }
+    return Math.sqrt(sum / this.timeData.length);
+  }
+}
+
+const listener = new THREE.AudioListener();
+camera.add(listener);
+scene.add(camera);
+const streamAudio = new THREE.PositionalAudio(listener);
+const splashAudio = new THREE.PositionalAudio(listener);
+for (const a of [streamAudio, splashAudio]) { a.setRefDistance(0.5); a.setRolloffFactor(1.3); a.setDistanceModel('inverse'); scene.add(a); }
+const audio = new LiquidAudioEngine(listener, streamAudio, splashAudio);
+
+const unlockBtn = document.getElementById('unlock');
+async function unlockAudio() {
+  await audio.unlock();
+  if (state.muted && !unlockAudio.done) { state.muted = false; syncUI(); }
+  unlockAudio.done = true;
+  unlockBtn.classList.add('gone');
+}
+for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, unlockAudio, { passive: true });
+
+/* =====================================================================
+   7. CAMERA PRESETS
+   ===================================================================== */
+const VIEWS = {
+  side:  { pos: [2.6, 1.35, 0.7],   target: [0, 0.8, 0.4] },
+  top:   { pos: [0.02, 3.4, 0.42],  target: [0, 0.4, 0.42] },
+  macro: { pos: [0.42, 0.88, 0.32], target: [0, 0.7, 0.42] },
+  cross: { pos: [1.35, 1.05, 0.25], target: [0, 0.98, 0.02] },
+  wide:  { pos: [3.8, 3.2, -3.2],   target: [0, 0.4, 0.3] },
+};
+let tween = null;
+function goView(name) {
+  const v = VIEWS[name]; if (!v) return;
+  state.view = name;
+  tween = { t: 0, fromP: camera.position.clone(), fromT: controls.target.clone(),
+    toP: new THREE.Vector3(...v.pos), toT: new THREE.Vector3(...v.target) };
+  body.setCrossSection(name === 'cross');
+  document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+}
+const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+/* =====================================================================
+   8. PHYSIOLOGY, OVERDRIVE & DISSOLVING
+   ===================================================================== */
+const urineColor = new THREE.Color('#f0b84a');
+const _target = new THREE.Color(), _tmp = new THREE.Color();
+function targetColor(out) {
+  const s = SUBSTANCES[state.substance];
+  if (s.color) return out.set(s.color);
+  // Base urochrome shade from hydration, then tint with each active food pigment
+  const h = state.hydration;
+  out.set(AUTO_STOPS.at(-1)[1]);
+  for (let i = 0; i < AUTO_STOPS.length - 1; i++) {
+    const [a, ca] = AUTO_STOPS[i], [b, cb] = AUTO_STOPS[i + 1];
+    if (h <= b) { out.set(ca).lerp(_tmp.set(cb), (h - a) / (b - a)); break; }
+  }
+  for (const [k, amt] of Object.entries(pigments)) if (amt > 0.01) out.lerp(_tmp.set(PIGMENTS[k].color), (1 - Math.exp(-amt)) * 0.85);
+  return out;
+}
+
+function consume(item) {
+  if (!item) return;
+  state.hydration = THREE.MathUtils.clamp(state.hydration + item.ml / 2200, 0, 1);
+  if (item.ml > 0) state.bodyWater = Math.min(1, state.bodyWater + item.ml / 4000);
+  sim.diuretic += item.diuretic || 0;
+  for (const [k, v] of Object.entries(item.pig || {})) pigments[k] += v;
+  intakeLog[item.id] = (intakeLog[item.id] || 0) + 1;
+  renderIntakeLog(); syncUI();
+}
+function clearIntake() {
+  for (const k in pigments) pigments[k] = 0;
+  for (const k in intakeLog) delete intakeLog[k];
+  sim.diuretic = 0; renderIntakeLog(); syncUI();
+}
+function renderIntakeLog() {
+  const el = document.getElementById('intakeLog'); el.innerHTML = '';
+  const ids = Object.keys(intakeLog);
+  if (!ids.length) { el.innerHTML = '<span>Nothing eaten yet</span>'; return; }
+  for (const id of ids) { const it = INTAKE.find(i => i.id === id); const s = document.createElement('span'); s.textContent = `${it.icon} ${it.label} ×${intakeLog[id]}`; el.appendChild(s); }
+}
+
+/* ---- Toilet bowl level, overflow and the flood ---- */
+function bowlLevel() { const base = state.surface === 'water' ? WATER_Y : DRY_Y; return base + (0.425 - base) * Math.min(1, state.bowl / BOWL_CAP_ML); }
+function floodRadius() { return Math.sqrt(state.flood * 1e-6 / (Math.PI * 0.0015)); }   // 1.5 mm deep film
+function updateBowl(dt) {
+  if (sim.flushing > 0) { sim.flushing -= dt; state.bowl = Math.max(0, state.bowl - dt * 1500); toilet.water.rotation.z += dt * 9; }
+  if (state.bowl > BOWL_CAP_ML) {
+    const excess = state.bowl - BOWL_CAP_ML;
+    state.bowl = BOWL_CAP_ML; state.flood += excess; sim.spillT = 0.8;
+    for (let i = 0; i < Math.min(20, excess * 0.6); i++) {          // spill over the rim
+      const a = Math.random() * Math.PI * 2;
+      splash.spawn(Math.cos(a) * 0.24, 0.44, TOILET_Z + Math.sin(a) * 0.29, Math.cos(a) * 0.35, 0.15, Math.sin(a) * 0.4, 0.008 + Math.random() * 0.006, 1.5, 0.9);
+    }
+  }
+  sim.spillT = Math.max(0, sim.spillT - dt);
+  if (sim.spillT <= 0) state.flood = Math.max(0, state.flood - dt * 12);    // slowly seeps away
+  toilet.water.visible = state.surface === 'water' || state.bowl > 30;
+  toilet.water.position.y = bowlLevel();
+  const s = Math.max(0.5, (0.115 + (toilet.water.position.y - 0.27) * 0.43) / 0.128);
+  toilet.water.scale.set(s, 1.2 * s, 1);
+  toilet.waterMat.color.set('#cfeaf5').lerp(urineColor, Math.min(0.9, state.bowl / (state.bowl + 600)));
+  // Porcelain takes on the pee colour: stains build up with use, flushing / mopping cleans them
+  toilet.ceramicIn.color.set('#eceff3').lerp(urineColor, sim.stain);
+  toilet.ceramic.color.set('#f4f6f8').lerp(urineColor, sim.stain * 0.55);
+  toilet.seatMat.color.set('#fbfbfb').lerp(urineColor, sim.stain * 0.35);
+  const fr = floodRadius();
+  flood.scale.setScalar(Math.max(0.0001, fr)); floodMat.color.copy(urineColor);
+  // Once the flood reaches the feet it starts dissolving the body
+  sim.submerged = state.scenario === 'bathroom' && !state.dissolved ? THREE.MathUtils.clamp((fr - 0.62) / 0.3, 0, 1) : 0;
+  if (sim.submerged > 0) state.bodyWater = Math.max(0, state.bodyWater - dt * 0.06 * sim.submerged);
+}
+
+/* ---- Trajectory preview / predicted range ---- */
+const previewGeo = new THREE.BufferGeometry().setFromPoints(Array.from({ length: 70 }, () => new THREE.Vector3()));
+const previewLine = new THREE.Line(previewGeo, new THREE.LineDashedMaterial({ color: '#4fd6e8', dashSize: 0.03, gapSize: 0.02, transparent: true, opacity: 0.85 }));
+previewLine.frustumCulled = false; scene.add(previewLine);
+function expectedSpeed() {
+  if (sim.env > 0.3) return sim.speed;
+  const boost = state.overdrive ? OVERDRIVE : 1;
+  const p = Math.min(1, 0.2 + 0.8 * Math.sqrt(Math.max(state.fill, 0.06))) * boost;
+  return (1.2 + 2.0 * Math.min(1, p)) * boost * state.power;
+}
+function updatePreview() {
+  body.origin.getWorldPosition(_o); body.getDirection(_v);
+  const v = expectedSpeed(), pos = previewGeo.attributes.position, step = 0.012;
+  let x = _o.x, y = _o.y, z = _o.z, vx = _v.x * v, vy = _v.y * v, vz = _v.z * v, landed = false;
+  for (let i = 0; i < 70; i++) {
+    pos.setXYZ(i, x, y, z);
+    if (landed) continue;
+    x += vx * step; vy -= GRAVITY * step; y += vy * step; z += vz * step;
+    const s = surfaceAt(x, z);
+    if (y <= s.y) { y = s.y; landed = true; }
+  }
+  sim.range = Math.hypot(x - _o.x, z - _o.z);
+  pos.needsUpdate = true; previewLine.computeLineDistances();
+  previewLine.visible = state.preview && !state.dissolved;
+}
+
+function dissolve() {
+  state.dissolved = true; state.flowing = false;
+  body.origin.getWorldPosition(_o);
+  for (let i = 0; i < 400; i++) {
+    const a = Math.random() * Math.PI * 2, s = 0.5 + Math.random() * 2.5;
+    splash.spawn(_o.x, 0.2 + Math.random() * 1.4, _o.z - 0.1, Math.cos(a) * s, Math.random() * 2.5, Math.sin(a) * s, 0.008 + Math.random() * 0.01, 2, 0.9);
+  }
+  puddleState.volume = 60; puddleState.center.set(0, 0.002, 0);
+  audio.gloop(false);
+  document.getElementById('bannerText').textContent = sim.submerged > 0
+    ? "You didn't flush. The overflow dissolved you." : 'You peed out your entire body water.';
+  document.getElementById('banner').classList.add('show');
+  syncUI();
+}
+function respawn() {
+  state.dissolved = false; state.bodyWater = 1; state.fill = 0.3; state.overdrive = false;
+  state.bowl = 0; state.flood = 0; puddleState.volume = 0;
+  audio.gloop(true);
+  document.getElementById('banner').classList.remove('show');
+  syncUI();
+}
+
+function updatePhysiology(dt) {
+  // Hydration slowly falls (you need to keep drinking); diuretics & pigments wear off
+  state.hydration = Math.max(0, state.hydration - dt * 0.0025);
+  sim.diuretic *= Math.exp(-dt / 30);
+  for (const k in pigments) pigments[k] *= Math.exp(-dt / 45);
+  const production = (0.4 + 3.2 * state.hydration) * FILL_SPEED * (1 + sim.diuretic);
+  state.fill = Math.min(1, state.fill + production * dt / CAPACITY_ML);
+  if (state.overdrive && !state.dissolved) state.fill = 1;          // infinite bladder
+  if (state.auto && !state.flowing && !state.dissolved && state.fill > 0.85) state.flowing = true;
+
+  const target = state.flowing && !state.dissolved ? 1 : 0;
+  sim.env += (target - sim.env) * Math.min(1, dt * (target ? 2.5 : 7));
+
+  const boost = state.overdrive ? OVERDRIVE : 1;
+  const p = sim.env * Math.min(1, 0.2 + 0.8 * Math.sqrt(state.fill)) * THREE.MathUtils.smoothstep(state.fill, 0, 0.06) * boost;
+  sim.pressure = p;
+  sim.flow = QMAX_ML_S * p;
+  sim.speed = (1.2 + 2.0 * Math.min(1, p)) * (0.6 + 0.4 * sim.env) * boost * state.power;
+  if (state.flowing) {
+    sim.flowTime += dt;
+    if (state.duration > 0 && sim.flowTime >= state.duration) state.flowing = false;
+  } else sim.flowTime = 0;
+  sim.pdet = 8 + 40 * Math.pow(state.fill, 1.4) + 28 * sim.env * boost;
+  const drained = sim.flow * VOID_SPEED * dt;
+  state.voided += drained;
+  if (state.overdrive) state.bodyWater = Math.max(0, state.bodyWater - drained / BODY_RESERVE_ML);
+  else state.fill = Math.max(0, state.fill - drained / CAPACITY_ML);
+  if (!state.overdrive) state.bodyWater = Math.min(1, state.bodyWater + dt * 0.004 * (0.3 + state.hydration));
+  if (state.flowing && state.fill < 0.004) state.flowing = false;
+  if (!state.dissolved && state.bodyWater <= 0) dissolve();
+
+  sim.dissolve += ((state.dissolved ? 1 : 0) - sim.dissolve) * Math.min(1, dt * (state.dissolved ? 1.2 : 2.5));
+  if (Math.abs(sim.dissolve - (state.dissolved ? 1 : 0)) < 0.002) sim.dissolve = state.dissolved ? 1 : 0;
+
+  targetColor(_target);
+  urineColor.lerp(_target, Math.min(1, dt * 2.5));
+  fluidUniforms.uColor.value.copy(urineColor);
+  body.fluidMat.color.copy(urineColor); body.fluidMat.emissive.copy(urineColor);
+  puddleMat.color.copy(urineColor);
+  peeBall.mat.color.copy(urineColor);
+  updateBowl(dt);
+}
+
+function updatePeeBall(t) {
+  const k = THREE.MathUtils.smoothstep(sim.dissolve, 0.55, 1);
+  peeBall.group.visible = k > 0.01;
+  if (!peeBall.group.visible) return;
+  const w = Math.sin(t * 5) * 0.07, bounce = Math.abs(Math.sin(t * 2.4)) * 0.12;
+  peeBall.group.position.set(body.root.position.x, bounce * k, body.root.position.z);
+  peeBall.group.rotation.y = state.yaw;
+  peeBall.group.scale.set(k * (1 + w), k * (1 - w), k * (1 + w));
+}
+
+/* ---- Rotation helpers: auto-spin, auto-aim ---- */
+function angleDiff(a, b) { return Math.atan2(Math.sin(b - a), Math.cos(b - a)); }
+function updatePose(dt) {
+  if (body.sitting) { state.yaw = Math.PI; state.flip = state.roll = 0; sim.yawVel = sim.pitchVel = 0; return; }
+  if (state.spin && !spinDrag) {
+    const w = dt * state.spinSpeed, ax = state.spinAxis;
+    if (ax === 'yaw') state.yaw += w; else if (ax === 'pitch') state.flip += w; else if (ax === 'roll') state.roll += w;
+    else { state.yaw += w; state.flip += w * 0.73; state.roll += w * 0.41; }
+  }
+  if (!spinDrag) {
+    if (Math.abs(sim.yawVel) > 0.01) { state.yaw += sim.yawVel * dt; sim.yawVel *= Math.exp(-dt * 1.4); }
+    if (Math.abs(sim.pitchVel) > 0.01) { state.flip += sim.pitchVel * dt; sim.pitchVel *= Math.exp(-dt * 1.4); }
+  }
+  if (state.dissolved) { state.flip *= Math.exp(-dt * 3); state.roll *= Math.exp(-dt * 3); }
+  const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+  state.yaw = wrap(state.yaw); state.flip = wrap(state.flip); state.roll = wrap(state.roll);
+  if (state.autoAim && !state.dissolved && !spinDrag && Math.abs(sim.yawVel) < 0.3) {
+    body.origin.getWorldPosition(_o);
+    let best = null, bd = Infinity;
+    for (const t of targets) {
+      if (t.dead || t.scene !== state.scenario || t.maxHp === Infinity) continue;
+      const c = t.shape === 'sphere' ? t.pos : _v.copy(t.pos).setY(t.pos.y + t.h * 0.5);
+      const d = Math.hypot(c.x - _o.x, c.z - _o.z);
+      if (d < bd) { bd = d; best = { x: c.x, y: c.y, z: c.z }; }
+    }
+    if (best) {
+      const yaw = Math.atan2(best.x - _o.x, best.z - _o.z);
+      state.yaw += angleDiff(state.yaw, yaw) * Math.min(1, dt * 4);
+      // Ballistic aim: θ = atan((v² − √(v⁴ − g(g·d² + 2·dy·v²))) / (g·d))
+      const v = Math.max(sim.speed, 2.6 * (state.overdrive ? OVERDRIVE : 1)), d = Math.max(0.05, bd), dy = best.y - _o.y;
+      const disc = v ** 4 - GRAVITY * (GRAVITY * d * d + 2 * dy * v * v);
+      const aim = disc >= 0 ? Math.atan((v * v - Math.sqrt(disc)) / (GRAVITY * d)) : Math.PI / 4;
+      state.aim += (THREE.MathUtils.clamp(aim, -0.8, 0.75) - state.aim) * Math.min(1, dt * 4);
+    }
+  }
+}
+
+/* Switch figure: male stands anywhere; female sits on the toilet (bathroom only, seat down, pose locked). */
+function applyFigure(key) {
+  const go = () => {
+    if (!body.activate(key)) return;
+    const sit = key === 'female';
+    body.pivot.position.set(0, PIVOT_Y, sit ? TOILET_Z + 0.07 : 0);
+    toilet.seatPivot.rotation.x = sit ? 0 : 1.6;
+    if (sit) {
+      if (state.scenario !== 'bathroom') { state.scenario = 'bathroom'; applyScenario('bathroom'); }
+      state.surface = 'water'; toilet.group.visible = true;
+      state.yaw = Math.PI; state.flip = state.roll = 0; state.spin = false; state.autoAim = false;
+    } else if (Math.abs(state.yaw) > 3) state.yaw = 0;
+    $('modelNote').textContent = '';
+    syncUI();
+  };
+  if (body.rigs[key]) return go();
+  $('modelNote').textContent = 'Loading figure…';
+  body.loadRig(key, key === 'female' ? FEMALE_MODEL_URLS : [], 0, rig => {
+    if (rig && state.figure === key) go();
+    else if (!rig) { $('modelNote').textContent = 'Could not load that figure.'; state.figure = body.rig?.key || 'male'; syncUI(); }
+  });
+}
+
+function applyScenario(name) {
+  const s = SCENARIOS[name]; if (!s) return;
+  for (const [k, g] of Object.entries(envGroups)) g.visible = k === name;
+  floorMat.map = FLOOR_TEX[name]; floorMat.needsUpdate = true;
+  scene.background.set(s.bg); scene.fog.color.set(s.bg);
+  hemi.intensity = s.hemi;
+  key.intensity = name === 'campfire' ? 0.25 : 2.2;
+  puddleState.volume = 0;
+  toilet.group.visible = state.surface !== 'floor';
+  toilet.water.visible = state.surface === 'water';
+}
+
+/* =====================================================================
+   9. UI BINDING
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+for (const [k, s] of Object.entries(SCENARIOS)) $('scenario').add(new Option(s.label, k));
+const subSel = $('substance');
+for (const [k, s] of Object.entries(SUBSTANCES)) subSel.add(new Option(s.label, k));
+const swatchWrap = $('swatches');
+for (const k of ['water', 'normal', 'vitb', 'beet', 'severe']) {
+  const b = document.createElement('button');
+  b.className = 'swatch'; b.style.background = SUBSTANCES[k].color; b.title = SUBSTANCES[k].label; b.dataset.sub = k;
+  b.onclick = () => setValue('substance', state.substance === k ? 'auto' : k);
+  swatchWrap.appendChild(b);
+}
+
+function setValue(key, value) {
+  if (!(key in state)) return;
+  if (typeof state[key] === 'number') value = parseFloat(value);
+  if (typeof state[key] === 'boolean') value = value === true || value === 'true';
+  if (key === 'flowing' && state.dissolved) value = false;
+  if (key === 'flowing' && value && !state.flowing) sim.flowTime = 0;
+  state[key] = value;
+  if (key === 'surface') { toilet.group.visible = value !== 'floor'; toilet.water.visible = value === 'water'; }
+  if (key === 'figure') applyFigure(value);
+  if (key === 'skinStyle') body.applySkin();
+  if (key === 'pose') body.applyPose();
+  if (key === 'scenario' && value !== 'bathroom' && body.sitting) { state.figure = 'male'; applyFigure('male'); }
+  if (key === 'scenario') { applyScenario(value); if (value === 'range' && !state.autoAim) state.autoAim = true; }
+  if (key === 'overdrive' && value && !state.flowing) state.flowing = true;
+  syncUI();
+}
+
+const deg = v => Math.round(v * 57.3) + '°';
+const fmt = { weight: v => Math.round(v * 100) + '%', waist: v => Math.round(v * 100) + '%', belly: v => Math.round(v * 100) + '%',
+  skin: v => Math.round(v * 100) + '%', hydration: v => Math.round(v * 3.5 * 10) / 10 + ' L/day', aim: deg, yaw: deg,
+  power: v => v.toFixed(2) + '×', flip: deg, roll: deg, spinSpeed: v => (v >= 0 ? '↺ ' : '↻ ') + Math.abs(v * 57.3).toFixed(0) + '°/s', duration: v => v ? v + ' s' : 'until empty',
+  volume: v => Math.round(v * 100) + '%', pitch: v => v.toFixed(2) + '×' };
+
+function syncUI() {
+  document.querySelectorAll('[data-key]').forEach(el => {
+    const k = el.dataset.key;
+    if (el.type === 'checkbox') el.checked = state[k];
+    else if (document.activeElement !== el) el.value = state[k];
+    const lbl = $('v-' + k); if (lbl && fmt[k]) lbl.textContent = fmt[k](state[k]);
+  });
+  $('btnMute').textContent = state.muted ? '🔇 Muted — click to unmute' : '🔊 Sound on';
+  $('btnMute').classList.toggle('active', !state.muted);
+  document.querySelectorAll('.swatch').forEach(b => b.classList.toggle('active', b.dataset.sub === state.substance));
+  const s = SUBSTANCES[state.substance];
+  $('colorNote').textContent = s.note || autoNote();
+  $('btnRespawn').style.display = state.dissolved ? '' : 'none';
+  if (!state.dissolved) $('banner').classList.remove('show');
+}
+function autoNote() {
+  let top = null, best = 0.25;
+  for (const [k, a] of Object.entries(pigments)) if (a > best) { best = a; top = k; }
+  if (top) return 'Auto: ' + PIGMENTS[top].note;
+  const h = state.hydration;
+  return h > 0.75 ? 'Auto: high intake → pale, diluted urine.' : h > 0.45 ? 'Auto: normal intake → soft amber.'
+    : h > 0.2 ? 'Auto: low intake → darker yellow, more concentrated.' : 'Auto: severe dehydration → dark amber.';
+}
+
+document.querySelectorAll('[data-key]').forEach(el => {
+  el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input', () =>
+    setValue(el.dataset.key, el.type === 'checkbox' ? el.checked : el.value));
+});
+$('btnFlow').onclick = () => setValue('flowing', !state.flowing);
+$('btnDrink').onclick = () => consume(INTAKE[0]);
+$('btnFlush').onclick = () => { sim.flushing = 1.6; sim.stain *= 0.35; audio.flush(); };
+$('btnMop').onclick = () => { state.flood = 0; puddleState.volume = 0; sim.stain = 0; };
+$('btnClearIntake').onclick = clearIntake;
+for (const it of INTAKE) {
+  const b = document.createElement('button');
+  b.innerHTML = `<em>${it.icon}</em>${it.label}<small>${it.ml > 0 ? '+' + it.ml + ' mL' : it.ml < 0 ? 'dehydrating' : 'pigment'}</small>`;
+  b.title = it.pig ? Object.keys(it.pig).map(k => PIGMENTS[k].note).join(' ') : `${it.ml} mL of fluid`;
+  b.onclick = () => consume(it);
+  $('intake').appendChild(b);
+}
+renderIntakeLog();
+$('btnMute').onclick = () => setValue('muted', !state.muted);
+$('btnRespawn').onclick = $('btnRespawn2').onclick = respawn;
+$('btnResetTargets').onclick = resetTargets;
+$('glbFile').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  $('modelNote').textContent = 'Loading ' + f.name + '…';
+  if (body.rigs.custom) { body.root.remove(body.rigs.custom.wrap); delete body.rigs.custom; }
+  const url = URL.createObjectURL(f);
+  body.loadRig('custom', [url], 0, rig => {
+    if (!rig) { $('modelNote').textContent = "Couldn't read " + f.name + ' (needs a .glb file).'; return; }
+    if (!$('figureSel').querySelector('[value=custom]')) $('figureSel').add(new Option('Custom: ' + f.name, 'custom'));
+    else $('figureSel').querySelector('[value=custom]').textContent = 'Custom: ' + f.name;
+    state.figure = 'custom'; applyFigure('custom');
+    $('modelNote').textContent = rig.hips ? `Loaded ${f.name} (Mixamo rig detected: poses & skeleton work).` : `Loaded ${f.name}. No Mixamo skeleton found, so poses and the skeleton skin are limited.`;
+  });
+};
+$('btnUpright').onclick = () => { state.flip = state.roll = 0; sim.yawVel = sim.pitchVel = 0; state.spin = false; syncUI(); };
+document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => goView(b.dataset.view));
+$('tglBody').onclick = () => { $('panelBody').classList.toggle('hidden'); $('panelSound').classList.add('hidden'); };
+$('tglSound').onclick = () => { $('panelSound').classList.toggle('hidden'); $('panelBody').classList.add('hidden'); };
+unlockBtn.onclick = unlockAudio;
+/* ---- Drag the person (or pee ball) to spin them, with flick inertia ---- */
+const raycaster = new THREE.Raycaster(), ndc = new THREE.Vector2();
+let spinDrag = null; sim.yawVel = 0;
+function pickBody(e) {
+  if (body.sitting) return false;
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  return raycaster.intersectObjects([body.root, peeBall.group], true).length > 0;
+}
+// Capture phase on the container runs before OrbitControls, so a drag on the body never orbits the camera
+container.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || !pickBody(e)) return;
+  e.stopPropagation();
+  spinDrag = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId };
+  state.spin = false; sim.yawVel = sim.pitchVel = 0; syncUI();
+  container.setPointerCapture(e.pointerId); container.style.cursor = 'grabbing';
+}, { capture: true });
+container.addEventListener('pointermove', e => {
+  if (spinDrag) {
+    const now = performance.now(), dx = (e.clientX - spinDrag.x) * 0.012, dy = (e.clientY - spinDrag.y) * 0.012;
+    const span = Math.max(0.008, (now - spinDrag.t) / 1000);
+    state.yaw += dx; state.flip += dy;
+    sim.yawVel = THREE.MathUtils.clamp(dx / span, -14, 14);
+    sim.pitchVel = THREE.MathUtils.clamp(dy / span, -14, 14);
+    spinDrag.x = e.clientX; spinDrag.y = e.clientY; spinDrag.t = now;
+  } else if (e.buttons === 0) container.style.cursor = pickBody(e) ? 'grab' : '';
+});
+const endSpin = () => {
+  if (!spinDrag) return;
+  if (performance.now() - spinDrag.t > 90) sim.yawVel = sim.pitchVel = 0;     // released while holding still: no flick
+  spinDrag = null; container.style.cursor = 'grab';
+};
+container.addEventListener('pointerup', endSpin);
+container.addEventListener('pointercancel', endSpin);
+
+const held = {};
+window.addEventListener('keydown', e => {
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+  if (e.code === 'Space') { e.preventDefault(); setValue('flowing', !state.flowing); }
+  held[e.code] = true;
+});
+window.addEventListener('keyup', e => { held[e.code] = false; });
+if (EMBED || innerWidth < 860) { $('panelBody').classList.add('hidden'); $('panelSound').classList.add('hidden'); }
+
+window.addEventListener('message', e => {
+  const m = e.data; if (!m || typeof m !== 'object') return;
+  if (m.type === 'hydrosim:set') {
+    setValue(m.key, m.value);
+    if (m.key === 'muted' && !m.value) audio.unlock().then(() => { if (audio.ctx.state === 'running') unlockBtn.classList.add('gone'); });
+  }
+  if (m.type === 'hydrosim:view') goView(m.view);
+  if (m.type === 'hydrosim:flush') $('btnFlush').onclick();
+  if (m.type === 'hydrosim:respawn') respawn();
+  if (m.type === 'hydrosim:resetTargets') resetTargets();
+  if (m.type === 'hydrosim:consume') consume(INTAKE.find(i => i.id === m.id));
+  if (m.type === 'hydrosim:mop') $('btnMop').onclick();
+});
+
+const viz = $('viz'), vctx = viz.getContext('2d');
+function drawViz() {
+  const w = viz.width, h = viz.height;
+  vctx.clearRect(0, 0, w, h);
+  const bars = 48, data = audio.freqData;
+  const col = '#' + urineColor.getHexString(THREE.SRGBColorSpace);
+  for (let i = 0; i < bars; i++) {
+    const idx = Math.floor(Math.pow(i / bars, 1.6) * data.length * 0.7);
+    const v = data[idx] / 255, bh = v * (h - 10);
+    vctx.fillStyle = col; vctx.globalAlpha = 0.35 + v * 0.65;
+    vctx.fillRect(i * (w / bars) + 1, h - bh, w / bars - 3, bh);
+  }
+  vctx.globalAlpha = 1; vctx.strokeStyle = '#4fd6e8'; vctx.lineWidth = 2; vctx.beginPath();
+  const td = audio.timeData;
+  for (let i = 0; i < td.length; i += 4) {
+    const x = (i / td.length) * w, y = h / 2 + ((td[i] - 128) / 128) * h * 0.45;
+    i ? vctx.lineTo(x, y) : vctx.moveTo(x, y);
+  }
+  vctx.stroke();
+}
+
+/* =====================================================================
+   10. MAIN LOOP
+   ===================================================================== */
+let composer = null;
+function studioComposer() {
+  if (composer) return composer;
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const ao = new GTAOPass(scene, camera, innerWidth, innerHeight);
+  ao.updateGtaoMaterial({ radius: 0.25, distanceFallOff: 1, thickness: 1, scale: 1.2 });
+  composer.addPass(ao);
+  composer.addPass(new OutputPass());
+  composer.setSize(innerWidth, innerHeight);
+  return composer;
+}
+
+function resize() {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer?.setSize(innerWidth, innerHeight);
+  fluidUniforms.uScale.value = (innerHeight * renderer.getPixelRatio()) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+}
+addEventListener('resize', resize); resize();
+
+const clock = new THREE.Clock();
+let uiTimer = 0, msgTimer = 0;
+function frame() {
+  const dt = Math.min(clock.getDelta(), 1 / 30), t = clock.elapsedTime;
+
+  if (held.ArrowLeft) state.yaw += dt * 1.6;
+  if (held.ArrowRight) state.yaw -= dt * 1.6;
+  if (held.ArrowUp) state.flip -= dt * 1.6;
+  if (held.ArrowDown) state.flip += dt * 1.6;
+  updatePose(dt);
+  updatePhysiology(dt);
+  body.update(dt, t);
+  updatePeeBall(t);
+  updateTargets(dt, t);
+  updatePreview();
+
+  for (const k of IMPACT_TYPES) impacts[k] = 0;
+  _accum.set(0, 0, 0); _accumN = 0;
+  emitStream(dt);
+  stream.update(dt, 0, onStreamHit, onStreamTarget);
+  splash.update(dt, 0.5, onSplashHit);
+  if (_accumN) impactCentroid.lerp(_accum.multiplyScalar(1 / _accumN), 0.3);
+
+  for (const r of ripples) if (r.visible) {
+    r.userData.t += dt / 0.7;
+    const k = r.userData.t; r.scale.setScalar(0.005 + k * 0.07); r.material.opacity = 0.45 * (1 - k);
+    if (k >= 1) r.visible = false;
+  }
+  for (const s of steam) if (s.visible) {
+    s.userData.t += dt / 1.6;
+    const k = s.userData.t; s.position.y += dt * 0.5;
+    s.scale.setScalar(s.userData.size * (0.5 + k)); s.material.opacity = 0.5 * (1 - k);
+    if (k >= 1) s.visible = false;
+  }
+  // Yellow snow lingers; everywhere else puddles slowly evaporate
+  puddleState.volume = Math.max(0, puddleState.volume - dt * (state.scenario === 'snow' ? 0.05 : 0.4));
+  puddle.position.copy(puddleState.center);
+  puddle.scale.setScalar(Math.max(0.0001, Math.sqrt(puddleState.volume) * 0.012));
+
+  if (state.spatial) {
+    body.origin.getWorldPosition(streamAudio.position);
+    splashAudio.position.copy(impactCentroid);
+  } else {
+    camera.getWorldDirection(_d);
+    streamAudio.position.copy(camera.position).addScaledVector(_d, 0.5);
+    splashAudio.position.copy(streamAudio.position);
+  }
+  audio.update(dt);
+  const rms = audio.started ? audio.levels() : 0;
+
+  if (tween) {
+    tween.t = Math.min(1, tween.t + dt / 0.9);
+    const e = ease(tween.t);
+    camera.position.lerpVectors(tween.fromP, tween.toP, e);
+    controls.target.lerpVectors(tween.fromT, tween.toT, e);
+    if (tween.t >= 1) tween = null;
+  }
+  controls.maxPolarAngle = state.view === 'top' ? Math.PI : Math.PI * 0.495;
+  controls.update();
+  skeletonViz.update();
+  if (state.studio) studioComposer().render(); else renderer.render(scene, camera);
+
+  uiTimer += dt;
+  if (uiTimer > 0.08) {
+    uiTimer = 0;
+    $('fillBar').style.width = (state.fill * 100).toFixed(1) + '%';
+    $('v-fill').textContent = state.overdrive ? '∞ (overdrive)' : Math.round(state.fill * CAPACITY_ML) + ' / ' + CAPACITY_ML + ' mL';
+    $('bodyBar').style.width = (state.bodyWater * 100).toFixed(1) + '%';
+    $('v-body').textContent = Math.round(state.bodyWater * 100) + '%';
+    $('bodyWarn').textContent = state.dissolved ? '💛 You are a pee ball now.' : state.bodyWater < 0.25 ? '⚠ Critically drained — about to dissolve!'
+      : state.bodyWater < 0.6 ? '⚠ Losing body water fast' : '';
+    const u = state.fill, urge = $('urge');
+    urge.textContent = u > 0.95 ? 'URGENT!' : u > 0.8 ? 'Strong' : u > 0.55 ? 'Moderate' : u > 0.3 ? 'Mild' : 'None';
+    urge.style.color = u > 0.95 ? '#ff5d6c' : u > 0.8 ? '#ff9f43' : u > 0.55 ? '#f5c14b' : '#4fd6e8';
+    $('t-pres').textContent = Math.round(sim.pdet) + ' cmH₂O';
+    $('t-flow').textContent = sim.flow.toFixed(1) + ' mL/s';
+    $('t-vel').textContent = (sim.env > 0.02 ? sim.speed : 0).toFixed(2) + ' m/s';
+    $('t-void').textContent = Math.round(state.voided) + ' mL';
+    $('t-score').textContent = `${score.hits} hits · ${score.down} down`;
+    $('t-range').textContent = sim.range.toFixed(2) + ' m';
+    $('t-left').textContent = !state.flowing ? '—' : state.duration > 0 ? Math.max(0, state.duration - sim.flowTime).toFixed(1) + ' s'
+      : state.overdrive ? '∞' : sim.flow > 0.5 ? (state.fill * CAPACITY_ML / (sim.flow * VOID_SPEED)).toFixed(1) + ' s' : '—';
+    const bf = state.bowl / BOWL_CAP_ML;
+    $('bowlBar').style.width = (bf * 100).toFixed(1) + '%';
+    $('v-bowl').textContent = Math.round(state.bowl) + ' / ' + BOWL_CAP_ML + ' mL';
+    $('bowlWarn').textContent = sim.submerged > 0 ? '☠ The overflow is dissolving you! Flush & mop!'
+      : sim.spillT > 0 ? '🌊 OVERFLOWING: flush now!' : state.flood > 50 ? '🧽 Floor is flooded: mop it up'
+      : bf > 0.8 ? '⚠ Bowl almost full: flush soon' : '';
+    for (const k of ['hydration']) { const el = document.querySelector(`[data-key=${k}]`); if (document.activeElement !== el) el.value = state[k]; $('v-' + k).textContent = fmt[k](state[k]); }
+    const hex = '#' + urineColor.getHexString(THREE.SRGBColorSpace);
+    $('colorDot').style.background = hex;
+    $('colorName').textContent = (SUBSTANCES[state.substance].color ? SUBSTANCES[state.substance].label : 'Auto') + ' · ' + hex;
+    $('btnFlow').classList.toggle('on', state.flowing);
+    $('btnFlow').innerHTML = (state.flowing ? 'Stop' : 'Release') + ' <kbd>Space</kbd>';
+    if (state.substance === 'auto') $('colorNote').textContent = autoNote();
+    for (const k of ['yaw', 'flip', 'roll', 'aim']) { const el = document.querySelector(`[data-key=${k}]`); if (document.activeElement !== el) el.value = state[k]; $('v-' + k).textContent = deg(state[k]); }
+    if (audio.started) drawViz();
+  }
+  msgTimer += dt;
+  if (window.parent !== window && msgTimer > 0.05) {
+    msgTimer = 0;
+    const bands = [];
+    if (audio.started) for (let i = 0; i < 32; i++) bands.push(audio.freqData[Math.floor(Math.pow(i / 32, 1.6) * audio.freqData.length * 0.7)] / 255);
+    window.parent.postMessage({ type: 'hydrosim:telemetry', rms, bands, fill: state.fill, pressure: sim.pressure,
+      flow: sim.flow, pdet: sim.pdet, flowing: state.flowing, color: '#' + urineColor.getHexString(THREE.SRGBColorSpace),
+      audio: audio.started && !state.muted, surface: state.surface, hydration: state.hydration, substance: state.substance,
+      scenario: state.scenario, bodyWater: state.bodyWater, dissolved: state.dissolved, overdrive: state.overdrive,
+      hits: score.hits, down: score.down, bowl: state.bowl / BOWL_CAP_ML, flood: state.flood, range: sim.range }, '*');
+  }
+  requestAnimationFrame(frame);
+}
+
+resetTargets();
+applyScenario(state.scenario);
+setValue('surface', state.surface);
+goView('side'); tween.t = 1;
+syncUI();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
