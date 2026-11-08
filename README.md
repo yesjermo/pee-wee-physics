@@ -1,16 +1,16 @@
 <div align="center">
 
-<a href="https://yesjermo.github.io/urinal-physics/?splash"><img src="assets/splash.svg" alt="urinal-physics splash: click to enter" width="100%"></a>
+<a href="https://yesjermo.github.io/pee-wee-physics/?splash"><img src="assets/splash.svg" alt="pee-wee-physics splash: click to enter" width="100%"></a>
 
 <sub>▲ click the board to enter: the splash plays, then the simulator</sub>
 
-# 💛 urinal-physics 💛
+# 💛 pee-wee-physics 💛
 ### HydroSim 3D: the world's most over-engineered pee simulator
 
 *Real-time bladder physics. Procedural pee acoustics. Spatial audio. Nobody asked for this.*
 
-[![Play it now](https://img.shields.io/badge/▶_PLAY-splash_→_simulator-f5c14b?style=for-the-badge)](https://yesjermo.github.io/urinal-physics/?splash)
-[![Simulator](https://img.shields.io/badge/skip_the_intro-straight_to_the_toilet-4fd6e8?style=for-the-badge)](https://yesjermo.github.io/urinal-physics/simulator.html)
+[![Play it now](https://img.shields.io/badge/▶_PLAY-splash_→_simulator-f5c14b?style=for-the-badge)](https://yesjermo.github.io/pee-wee-physics/?splash)
+[![Simulator](https://img.shields.io/badge/skip_the_intro-straight_to_the_toilet-4fd6e8?style=for-the-badge)](https://yesjermo.github.io/pee-wee-physics/simulator.html)
 
 ![Three.js](https://img.shields.io/badge/three.js-r160-000000?logo=threedotjs&logoColor=white)
 ![Web Audio API](https://img.shields.io/badge/Web_Audio-100%25_synthesized-4fd6e8)
@@ -174,8 +174,8 @@ Yes. Drop in any rigged `.glb`. Mixamo rigs get the skeleton skin and stream pla
 ES modules don't load from `file://`, so serve the folder with literally anything:
 
 ```bash
-git clone https://github.com/yesjermo/urinal-physics.git
-cd urinal-physics
+git clone https://github.com/yesjermo/pee-wee-physics.git
+cd pee-wee-physics
 python3 -m http.server 8765
 ```
 
