@@ -1588,6 +1588,50 @@ function buildAlley(name, opt) {
     const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.03, 0.09, 12), glass); neck.position.y = 0.245; b.add(neck);
     addKnockable(name, b, opt.bottlesAt[0] + i * 0.14, 0, opt.bottlesAt[1] + (i % 2) * 0.1, 0.04, 0.29, 10, 'ceramic');
   }
+  // Broken skateboards: decks snapped in two (splintered ends, griptape on top, an original graphic underneath, trucks with a
+  // wheel or two missing). The halves are knockable; one cracked deck leans against the wall.
+  const deckGraphic = seed => {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g2 = c.getContext('2d');
+    const pal = [['#ff3d7f', '#ffd23f'], ['#2de2e6', '#b05cff'], ['#7cff4f', '#ff8a2a']][seed % 3];
+    g2.fillStyle = pal[0]; g2.fillRect(0, 0, 256, 64);
+    g2.fillStyle = pal[1]; for (let i = -2; i < 12; i++) { g2.beginPath(); g2.moveTo(i * 26, 64); g2.lineTo(i * 26 + 14, 64); g2.lineTo(i * 26 + 40, 0); g2.lineTo(i * 26 + 26, 0); g2.fill(); }   // diagonal stripes
+    g2.fillStyle = '#111'; g2.font = '900 34px Impact, sans-serif'; g2.fillText(['GRIND', 'SLAM', 'BAIL'][seed % 3], 70, 46);
+    g2.strokeStyle = 'rgba(0,0,0,0.5)'; g2.lineWidth = 3; for (let i = 0; i < 9; i++) { g2.beginPath(); g2.moveTo(Math.random() * 256, Math.random() * 64); g2.lineTo(Math.random() * 256, Math.random() * 64); g2.stroke(); }   // scuffs
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  };
+  const grip = new THREE.MeshStandardMaterial({ color: '#141414', roughness: 1 });
+  const ply = new THREE.MeshStandardMaterial({ color: '#c8a26a', roughness: 0.8 });
+  const truckMat = new THREE.MeshStandardMaterial({ color: '#b9bec4', metalness: 0.9, roughness: 0.35 });
+  const wheelMat = new THREE.MeshStandardMaterial({ color: '#f2efe6', roughness: 0.5 });
+  const boardHalf = (seed, half, wheels) => {
+    const b = new THREE.Group(), s = half ? 1 : -1, L = 0.36;
+    const under = new THREE.MeshStandardMaterial({ map: deckGraphic(seed), roughness: 0.6 });
+    under.map.offset.x = half ? 0.5 : 0; under.map.repeat.x = 0.5;
+    const deck = shadowed(new THREE.Mesh(new THREE.BoxGeometry(L, 0.013, 0.2), [ply, ply, grip, under, ply, ply])); deck.position.set(s * L / 2, 0.075, 0); b.add(deck);
+    const tail = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.013, 0.2), [ply, ply, grip, under, ply, ply])); tail.position.set(s * (L + 0.045), 0.09, 0); tail.rotation.z = s * 0.35; b.add(tail);
+    for (let k = 0; k < 5; k++) {                                   // splinters sticking out of the snapped end
+      const sp = new THREE.Mesh(new THREE.BoxGeometry(0.03 + Math.random() * 0.05, 0.01, 0.012 + Math.random() * 0.02), ply);
+      sp.position.set(-s * 0.012, 0.075 + (Math.random() - 0.5) * 0.008, -0.08 + k * 0.04); sp.rotation.y = (Math.random() - 0.5) * 0.6; sp.rotation.z = (Math.random() - 0.5) * 0.3; b.add(sp);
+    }
+    const hanger = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.19), truckMat); hanger.position.set(s * (L - 0.07), 0.045, 0); b.add(hanger);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.06), truckMat); base.position.set(s * (L - 0.07), 0.064, 0); b.add(base);
+    for (let w = 0; w < wheels; w++) { const wh = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.03, 16), wheelMat)); wh.rotation.x = Math.PI / 2; wh.position.set(s * (L - 0.07), 0.03, w ? 0.1 : -0.1); b.add(wh); }
+    return b;
+  };
+  for (const [x, z, ry, seed] of opt.boards || []) {
+    // the two halves lie a little apart, one flipped upside down, as if it just snapped
+    const a = boardHalf(seed, 0, 2), b = boardHalf(seed, 1, seed % 2 ? 1 : 0);
+    a.rotation.y = ry; b.rotation.set(Math.PI, ry + 0.5, 0); b.position.y = 0.1;
+    addKnockable(name, a, x, 0, z, 0.22, 0.1, 18, 'ceramic');
+    addKnockable(name, b, x + Math.cos(ry) * 0.45, 0, z - Math.sin(ry) * 0.45 + 0.12, 0.22, 0.1, 18, 'ceramic', 0.1);
+  }
+  if (opt.leanBoard) {                                              // a whole deck, cracked down the middle, leaning on the wall
+    const [x, z] = opt.leanBoard, lean = new THREE.Group(); lean.position.set(x, 0, z); lean.rotation.set(0, Math.PI / 2, 0); g.add(lean);
+    const under = new THREE.MeshStandardMaterial({ map: deckGraphic(7), roughness: 0.6 });
+    const deck = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.013, 0.2), [ply, ply, grip, under, ply, ply])); deck.rotation.z = Math.PI / 2 - 0.25; deck.position.set(0.1, 0.39, 0); lean.add(deck);
+    const crack = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.016, 0.21), new THREE.MeshStandardMaterial({ color: '#2a1a0a' })); crack.rotation.z = Math.PI / 2 - 0.25; crack.position.set(0.105, 0.41, 0); lean.add(crack);
+    const wh = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.03, 16), wheelMat)); wh.position.set(0.32, 0.03, 0.15); wh.rotation.x = Math.PI / 2; lean.add(wh);   // a loose wheel on the ground
+  }
   // Cigarette butts scattered on the ground, plus a standing ash can with a smouldering cigarette you can put out
   const buttMat = new THREE.MeshStandardMaterial({ color: '#f1ede2', roughness: 0.8 }), filterMat = new THREE.MeshStandardMaterial({ color: '#d98a3a', roughness: 0.8 });
   for (let i = 0; i < 24; i++) {
@@ -1700,6 +1744,7 @@ buildAlley('sfalley', {
   dumpsters: [[-2.1, -1.4, '#2f5d3a'], [-2.1, 2.2, '#2c4a6b']], bags: [[-1.5, -0.4], [-1.3, 0.1], [-1.6, 2.9]], boxes: [[-1.2, 1.2, 1], [-1.0, 1.6, 0.8], [0.9, 3.2, 1.1]],
   bottlesAt: [-0.4, 2.9], ashAt: [1.6, 0, 2.9], puddles: [[0.4, 1.4, 0.5], [-0.6, -1.8, 0.35], [1.2, -0.6, 0.3]], manhole: [0.6, 0.008, 2.3],
   lamps: [[-2.5, 3.0, -0.4], [-2.5, 3.0, 2.6]], rats: 3, roaches: 9,
+  boards: [[0.8, 1.9, 0.4, 0], [-0.9, -0.6, -0.7, 1]], leanBoard: [-2.58, 1.0],
 });
 {
   const g = envGroups.sfalley;
@@ -1720,6 +1765,7 @@ buildAlley('chiunder', {
   dumpsters: [[-2.1, -0.9, '#3b4b5e'], [-2.1, 2.6, '#4a5a2f']], bags: [[-1.6, 0.2], [-1.4, 1.2], [1.4, 3.1]], boxes: [[-1.3, -2.2, 1], [-1.1, -2.6, 0.8], [0.4, 3.2, 1]],
   bottlesAt: [0.9, 2.6], ashAt: [1.7, 0, 1.2], puddles: [[0.2, 0.9, 0.6], [1.1, -1.6, 0.4], [-0.8, 2.6, 0.3]], manhole: [-0.6, 0.008, -1.4],
   lamps: [[-1.2, 3.35, -1.5], [0.6, 3.35, 0.6], [-1.2, 3.35, 2.5]], rats: 4, roaches: 12,
+  boards: [[1.0, -0.4, 1.1, 2]],
   train(g) {
     // Deck overhead with I-beams, green columns, and an elevated train crossing every so often
     const concrete = new THREE.MeshStandardMaterial({ color: '#4d4f52', roughness: 0.95 });
