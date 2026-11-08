@@ -597,6 +597,7 @@ const SCENARIOS = {
   paris:    { label: '🥐 Paris boulevard',      bg: '#2b3552', hemi: 0.75, fog: [12, 75] },
   field:    { label: '🌾 Grass field',          bg: '#d5e6ec', hemi: 1.15, fog: [14, 70] },
   aim:      { label: '🎯 Aim trainer',          bg: '#171a21', hemi: 0.85, fog: [10, 40] },
+  y2k:      { label: '📟 Y2K Japanese room',     bg: '#e9c6e6', hemi: 0.7, fog: [14, 40], key: 1.0 },
 };
 
 const state = {
@@ -686,6 +687,11 @@ const FLOOR_TEX = {
   paris:    canvasTex(speckle('#8a8378', ['#9b9488', '#77705f', '#a8a090'], 2600, 7), 14),
   field:    canvasTex(speckle('#4f7f37', ['#5d9142', '#44702f', '#6aa04b'], 3000, 6), 16),
   aim:      canvasTex(tile('#1f232b', '#2d333d'), 18),
+  y2k:      canvasTex(g => {                                     // tatami: straw weave with dark cloth borders
+    g.fillStyle = '#b6be78'; g.fillRect(0, 0, 256, 256);
+    for (let y = 0; y < 256; y += 3) { g.fillStyle = y % 6 ? '#a8b06a' : '#c4cb88'; g.fillRect(0, y, 256, 2); }
+    g.fillStyle = '#3b4a2c'; g.fillRect(0, 0, 256, 10); g.fillRect(0, 246, 256, 10);
+  }, 6),
 };
 const floorMat = new THREE.MeshStandardMaterial({ map: FLOOR_TEX.bathroom, roughness: 0.4, metalness: 0.05 });
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), floorMat);
@@ -1127,6 +1133,177 @@ buildCity('paris', {
     tower.position.set(-9, 0, 48); g.add(tower);
   },
 });
+
+/* ---- Y2K Japanese bedroom: a pastel diorama room (two walls, open toward the cameras) on tatami, with candy-coloured
+        translucent plastic everything, glowing CRTs, a lava lamp, fairy lights, a kotatsu and plenty of knock-over-able clutter.
+        All original designs: no brands, logos or existing characters. ---- */
+const y2k = (() => {
+  const g = envGroups.y2k, S = shadowed;
+  const candy = (color, extra = {}) => new THREE.MeshPhysicalMaterial({ color, roughness: 0.15, transmission: 0.55, thickness: 0.2, ior: 1.4, clearcoat: 1, transparent: true, opacity: 0.92, ...extra });
+  const pastel = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 });
+  const glowTex = draw => { const c = document.createElement('canvas'); c.width = 256; c.height = 192; draw(c.getContext('2d'), 256, 192); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; };
+
+  // Walls: star-and-heart wallpaper on the back (z = +3) and left (x = -3) walls, a skirting strip, a window with a night skyline
+  const paper = canvasTex(g2 => {
+    g2.fillStyle = '#ffd6ec'; g2.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 26; i++) {
+      const x = (i * 97) % 256, y = (i * 61) % 256; g2.fillStyle = ['#ffffff', '#b8e8ff', '#fff3a6', '#d9c2ff'][i % 4];
+      g2.font = `${18 + (i % 3) * 8}px sans-serif`; g2.fillText(i % 2 ? '★' : '♥', x, y);
+    }
+  }, 1);
+  paper.repeat.set(4, 2);
+  const wallMat = new THREE.MeshStandardMaterial({ map: paper, roughness: 0.85 });
+  const back = S(new THREE.Mesh(new THREE.BoxGeometry(6.5, 2.8, 0.08), wallMat)); back.position.set(0.25, 1.4, 3.04); g.add(back);
+  const left = S(new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.8, 6.1), wallMat)); left.position.set(-3.04, 1.4, 0); g.add(left);
+  addSolid('y2k', 'box', 0.25, 1.4, 3.04, [3.25, 1.4, 0.04], 'ceramic'); addSolid('y2k', 'box', -3.04, 1.4, 0, [0.04, 1.4, 3.05], 'ceramic');
+  for (const [w, x, z, ry] of [[6.5, 0.25, 2.99, 0], [6.1, -2.99, 0, Math.PI / 2]]) {
+    const sk = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, 0.02), pastel('#ffffff')); sk.position.set(x, 0.05, z); sk.rotation.y = ry; g.add(sk);
+  }
+  const night = glowTex((c, w, h) => {
+    const gr = c.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#1a1446'); gr.addColorStop(1, '#ff7ac8'); c.fillStyle = gr; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 14; i++) { const bw = 12 + Math.random() * 22, bh = 40 + Math.random() * 110, x = i * 19; c.fillStyle = '#120d2e'; c.fillRect(x, h - bh, bw, bh);
+      for (let k = 0; k < 10; k++) { c.fillStyle = Math.random() < 0.5 ? '#ffe98a' : '#7ff4ff'; c.fillRect(x + 3 + Math.random() * (bw - 6), h - bh + 6 + Math.random() * (bh - 12), 3, 3); } }
+    c.fillStyle = '#fff6c9'; c.beginPath(); c.arc(200, 40, 16, 0, 7); c.fill();
+  });
+  const win = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.1), new THREE.MeshBasicMaterial({ map: night })); win.position.set(-1.0, 1.65, 2.995); win.rotation.y = Math.PI; g.add(win);
+  // White window frame and a centre mullion
+  for (const [w, h, x, y] of [[1.7, 0.06, -1.0, 2.23], [1.7, 0.06, -1.0, 1.07], [0.06, 1.2, -1.82, 1.65], [0.06, 1.2, -0.18, 1.65], [0.04, 1.1, -1.0, 1.65]]) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.05), pastel('#ffffff')); b.position.set(x, y, 2.98); g.add(b);
+  }
+  // Posters (original pop graphics)
+  const poster = (draw, x, y, z, ry, w = 0.6, h = 0.8) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: glowTex(draw), roughness: 0.5 })); m.position.set(x, y, z); m.rotation.y = ry; g.add(m); };
+  poster((c, w, h) => { c.fillStyle = '#7ff4ff'; c.fillRect(0, 0, w, h); c.fillStyle = '#ff4fa8'; c.font = 'bold 74px sans-serif'; c.fillText('2000', 22, 120);
+    c.fillStyle = '#fff'; c.font = '20px sans-serif'; c.fillText('★ MILLENNIUM ★', 44, 160); }, 1.1, 1.7, 2.99, Math.PI);
+  poster((c, w, h) => { const gr = c.createRadialGradient(128, 96, 10, 128, 96, 120); gr.addColorStop(0, '#fff3a6'); gr.addColorStop(1, '#b07cff'); c.fillStyle = gr; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#ff4fa8'; for (let i = 0; i < 5; i++) { const a = i / 5 * 6.28; c.beginPath(); c.arc(128 + Math.cos(a) * 55, 96 + Math.sin(a) * 55, 22, 0, 7); c.fill(); }
+    c.fillStyle = '#fff'; c.beginPath(); c.arc(128, 96, 26, 0, 7); c.fill(); }, -2.99, 1.75, 0.6, Math.PI / 2, 0.8, 0.6);
+  poster((c, w, h) => { c.fillStyle = '#1b1b2f'; c.fillRect(0, 0, w, h); c.fillStyle = '#7dff9e'; c.font = 'bold 30px monospace';
+    c.fillText('C Y B E R', 40, 70); c.fillText('P O P', 80, 120); c.strokeStyle = '#ff4fa8'; c.lineWidth = 4; c.strokeRect(12, 12, w - 24, h - 24); }, -2.99, 1.55, -1.3, Math.PI / 2, 0.55, 0.7);
+
+  // Fairy lights along the top of both walls
+  const fairy = [];
+  for (let i = 0; i < 34; i++) {
+    const onBack = i < 20, k = onBack ? i / 19 : (i - 20) / 13;
+    const x = onBack ? -2.9 + k * 6.1 : -2.97, z = onBack ? 2.96 : 2.8 - k * 5.6, y = 2.45 - Math.sin(k * Math.PI * 4) * 0.06;
+    const col = ['#ff7ac8', '#7ff4ff', '#fff3a6', '#b6ff8a'][i % 4];
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 2 }));
+    b.position.set(x, y, z); g.add(b); fairy.push(b);
+  }
+  for (const [c, x, z] of [['#ff6ac1', -1.5, 2.2], ['#6af2ff', -2.3, -0.5]]) { const l = new THREE.PointLight(c, 2.2, 6, 1.6); l.position.set(x, 2.1, z); g.add(l); }
+
+  // Kotatsu (low heated table with a quilt), floor cushions
+  const kot = new THREE.Group(); kot.position.set(-1.4, 0, 1.6); g.add(kot);
+  const quilt = S(new THREE.Mesh(new RoundedBoxGeometry(1.15, 0.32, 1.15, 4, 0.08), pastel('#ff9fcf'))); quilt.position.y = 0.16; kot.add(quilt);
+  const quiltPat = S(new THREE.Mesh(new RoundedBoxGeometry(1.17, 0.12, 1.17, 3, 0.05), pastel('#ffffff'))); quiltPat.position.y = 0.2; kot.add(quiltPat);
+  const top = S(new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.04, 0.85), pastel('#c58a52'))); top.position.y = 0.35; kot.add(top);
+  addSolid('y2k', 'box', -1.4, 0.18, 1.6, [0.58, 0.18, 0.58], 'floor');
+  for (const [x, z, c] of [[-1.4, 0.75, '#7ff4ff'], [-2.3, 1.6, '#fff3a6']]) { const cu = S(new THREE.Mesh(new RoundedBoxGeometry(0.55, 0.08, 0.55, 3, 0.03), pastel(c))); cu.position.set(x, 0.04, z); g.add(cu); }
+
+  // Candy-coloured translucent all-in-one computer on a low white desk, with a glowing pixel desktop
+  const desk = S(new THREE.Mesh(new RoundedBoxGeometry(1.3, 0.06, 0.6, 3, 0.02), pastel('#ffffff'))); desk.position.set(0.9, 0.7, 2.55); g.add(desk);
+  for (const x of [0.3, 1.5]) { const leg = S(new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.7, 10), new THREE.MeshStandardMaterial({ color: '#d8dde5', metalness: 0.9, roughness: 0.25 }))); leg.position.set(x, 0.35, 2.55); g.add(leg); }
+  addSolid('y2k', 'box', 0.9, 0.35, 2.55, [0.65, 0.38, 0.3], 'ceramic');
+  const desktopTex = glowTex((c, w, h) => {
+    const gr = c.createLinearGradient(0, 0, w, h); gr.addColorStop(0, '#5fd3ff'); gr.addColorStop(1, '#c69bff'); c.fillStyle = gr; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#fff'; c.fillRect(30, 30, 140, 90); c.fillStyle = '#ff7ac8'; c.fillRect(30, 30, 140, 14);
+    c.fillStyle = '#333'; c.font = '12px monospace'; c.fillText('welcome_2000.txt', 36, 62); c.fillText('> you have 1 new', 36, 80); c.fillText('  pager message', 36, 96);
+    for (let i = 0; i < 4; i++) { c.fillStyle = ['#fff3a6', '#7dff9e', '#ff9fcf', '#ffffff'][i]; c.fillRect(200, 30 + i * 36, 28, 24); }
+    c.fillStyle = 'rgba(0,0,0,0.12)'; for (let y = 0; y < h; y += 3) c.fillRect(0, y, w, 1);
+  });
+  const pc = new THREE.Group(); pc.position.set(0.75, 0.73, 2.6); pc.rotation.y = Math.PI; g.add(pc);
+  const shell = S(new THREE.Mesh(new RoundedBoxGeometry(0.46, 0.44, 0.42, 5, 0.12), candy('#ff9a3c'))); shell.position.y = 0.24; pc.add(shell);
+  const pcScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.23), new THREE.MeshBasicMaterial({ map: desktopTex })); pcScreen.position.set(0, 0.27, 0.212); pc.add(pcScreen);
+  const kb = S(new THREE.Mesh(new RoundedBoxGeometry(0.4, 0.025, 0.14, 2, 0.01), candy('#ffffff', { transmission: 0.3 }))); kb.position.set(0.8, 0.745, 2.32); g.add(kb);
+  const mouse = S(new THREE.Mesh(new THREE.SphereGeometry(0.035, 14, 10), candy('#ff9a3c'))); mouse.scale.set(1, 0.5, 1.4); mouse.position.set(1.1, 0.745, 2.32); g.add(mouse);
+
+  // CRT TV on a low cabinet, with a generic games console; the screen shows an original pixel scene
+  const cab = S(new THREE.Mesh(new RoundedBoxGeometry(0.9, 0.42, 0.45, 3, 0.03), pastel('#b8e8ff'))); cab.position.set(-2.55, 0.21, -0.6); g.add(cab);
+  addSolid('y2k', 'box', -2.55, 0.21, -0.6, [0.45, 0.21, 0.24], 'ceramic');
+  const gameTex = glowTex((c, w, h) => {
+    c.fillStyle = '#87d8ff'; c.fillRect(0, 0, w, h); c.fillStyle = '#7dff9e'; c.beginPath(); c.ellipse(70, 190, 120, 60, 0, 0, 7); c.fill(); c.beginPath(); c.ellipse(220, 200, 100, 50, 0, 0, 7); c.fill();
+    c.fillStyle = '#fff3a6'; c.beginPath(); c.arc(210, 40, 18, 0, 7); c.fill();
+    c.fillStyle = '#ff7ac8'; c.fillRect(110, 110, 22, 22); c.fillStyle = '#111'; c.fillRect(115, 116, 4, 4); c.fillRect(124, 116, 4, 4);
+    c.fillStyle = '#fff'; c.font = 'bold 16px monospace'; c.fillText('SCORE 002000', 8, 20);
+    c.fillStyle = 'rgba(0,0,0,0.15)'; for (let y = 0; y < h; y += 3) c.fillRect(0, y, w, 1);
+  });
+  const tv = new THREE.Group(); tv.position.set(-2.55, 0.42, -0.6); tv.rotation.y = Math.PI / 2; g.add(tv);
+  const tvBody = S(new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.5, 0.5, 4, 0.06), new THREE.MeshStandardMaterial({ color: '#f2f2f7', roughness: 0.4 }))); tvBody.position.y = 0.25; tv.add(tvBody);
+  const tvScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.35), new THREE.MeshBasicMaterial({ map: gameTex })); tvScreen.position.set(0, 0.27, 0.252); tv.add(tvScreen);
+  const console_ = S(new THREE.Mesh(new RoundedBoxGeometry(0.3, 0.07, 0.24, 3, 0.02), candy('#9b7bff'))); console_.position.set(-2.35, 0.45, -0.05); g.add(console_);
+
+  // Beaded curtain hanging in a doorway frame on the left wall
+  const beadMat = [candy('#ff7ac8'), candy('#7ff4ff'), candy('#fff3a6'), candy('#b6ff8a')];
+  const beadStrands = [];
+  for (let k = 0; k < 9; k++) {
+    const strand = new THREE.Group(); strand.position.set(-2.92, 2.15, -2.4 + k * 0.1); g.add(strand); beadStrands.push(strand);
+    for (let j = 0; j < 14; j++) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), beadMat[(j + k) % 4]); b.position.y = -j * 0.13; strand.add(b); }
+  }
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.04, 2.2, 1.0), pastel('#ffffff')); door.position.set(-2.99, 1.1, -2.0); door.material = new THREE.MeshStandardMaterial({ color: '#2a1f3d' }); g.add(door);
+
+  // Targets: things that get knocked over (lava lamp, inflatable chair, plush, flip phone, pet-egg toy, CD tower, pager, manga stack)
+  const lava = new THREE.Group();
+  const lBase = S(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.1, 18), new THREE.MeshStandardMaterial({ color: '#c0c6d0', metalness: 1, roughness: 0.25 }))); lBase.position.y = 0.05; lava.add(lBase);
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.065, 0.26, 18), new THREE.MeshPhysicalMaterial({ color: '#ff4fa8', emissive: '#ff2d95', emissiveIntensity: 0.6, transmission: 0.5, transparent: true, opacity: 0.85, roughness: 0.1 }));
+  glass.position.y = 0.23; lava.add(glass);
+  const blobs = Array.from({ length: 4 }, (_, i) => { const b = new THREE.Mesh(new THREE.SphereGeometry(0.022 + i * 0.004, 12, 10), new THREE.MeshStandardMaterial({ color: '#ffe04a', emissive: '#ffb02a', emissiveIntensity: 1.6 })); b.position.y = 0.16; lava.add(b); return b; });
+  const lCap = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.05, 18), lBase.material); lCap.position.y = 0.385; lava.add(lCap);
+  addKnockable('y2k', lava, 0.35, 0.76, 2.45, 0.08, 0.41, 40, 'ceramic', 0.76);
+
+  const chair = new THREE.Group(); const pink = candy('#ff7ac8', { transmission: 0.7, opacity: 0.75 });
+  for (const [y, r] of [[0.12, 0.26], [0.3, 0.26]]) { const t = S(new THREE.Mesh(new THREE.TorusGeometry(r, 0.11, 14, 28), pink)); t.rotation.x = Math.PI / 2; t.position.y = y; chair.add(t); }
+  const backRest = S(new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.1, 14, 28, Math.PI), pink)); backRest.position.set(0, 0.42, -0.18); chair.add(backRest);
+  addKnockable('y2k', chair, 1.6, 0, 1.6, 0.36, 0.7, 110, 'water');
+
+  const plush = new THREE.Group();   // an original round "mochi bunny" plush
+  const mochi = S(new THREE.Mesh(new THREE.SphereGeometry(0.13, 20, 16), pastel('#fff5fb'))); mochi.scale.set(1.1, 0.85, 1); mochi.position.y = 0.11; plush.add(mochi);
+  for (const s of [-1, 1]) {
+    const ear = S(new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.09, 6, 10), pastel('#fff5fb'))); ear.position.set(s * 0.05, 0.25, -0.02); ear.rotation.z = -s * 0.25; plush.add(ear);
+    const blush = new THREE.Mesh(new THREE.CircleGeometry(0.018, 12), new THREE.MeshBasicMaterial({ color: '#ffb3d1' })); blush.position.set(s * 0.06, 0.1, 0.125); plush.add(blush);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.01, 8, 6), new THREE.MeshBasicMaterial({ color: '#222' })); eye.position.set(s * 0.035, 0.13, 0.127); plush.add(eye);
+  }
+  addKnockable('y2k', plush, -0.9, 0, 0.9, 0.14, 0.3, 30, 'water');
+
+  const phone = new THREE.Group();   // pink clamshell phone, flipped open, with a glowing tiny screen and a dangling charm
+  const pPink = new THREE.MeshPhysicalMaterial({ color: '#ff7ac8', metalness: 0.4, roughness: 0.25, clearcoat: 1 });
+  const lower = S(new THREE.Mesh(new RoundedBoxGeometry(0.05, 0.1, 0.018, 2, 0.008), pPink)); lower.position.y = 0.05; phone.add(lower);
+  const upper = S(new THREE.Mesh(new RoundedBoxGeometry(0.05, 0.1, 0.014, 2, 0.007), pPink)); upper.position.set(0, 0.145, -0.012); upper.rotation.x = -0.25; phone.add(upper);
+  const pScr = new THREE.Mesh(new THREE.PlaneGeometry(0.036, 0.05), new THREE.MeshBasicMaterial({ color: '#9ff3ff' })); pScr.position.set(0, 0.15, -0.003); pScr.rotation.x = -0.25; phone.add(pScr);
+  const charm = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), candy('#fff3a6')); charm.position.set(0.03, 0.2, -0.02); phone.add(charm);
+  addKnockable('y2k', phone, -1.6, 0.37, 1.45, 0.04, 0.2, 15, 'ceramic', 0.37);
+
+  const egg = new THREE.Group();     // an original egg-shaped "virtual pet" keychain toy
+  const eggShell = S(new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), candy('#7ff4ff', { transmission: 0.3 }))); eggShell.scale.set(1, 1.15, 0.6); eggShell.position.y = 0.05; egg.add(eggShell);
+  const eggScr = new THREE.Mesh(new THREE.PlaneGeometry(0.03, 0.025), new THREE.MeshBasicMaterial({ color: '#c9e6a8' })); eggScr.position.set(0, 0.055, 0.028); egg.add(eggScr);
+  addKnockable('y2k', egg, -1.25, 0.37, 1.75, 0.05, 0.11, 12, 'ceramic', 0.37);
+
+  const cds = new THREE.Group();     // CD tower
+  const cdPole = S(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.7, 8), new THREE.MeshStandardMaterial({ color: '#d8dde5', metalness: 0.9, roughness: 0.2 }))); cdPole.position.y = 0.35; cds.add(cdPole);
+  for (let i = 0; i < 12; i++) { const cd = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.012, 0.125), candy(['#ff7ac8', '#7ff4ff', '#fff3a6', '#b6ff8a', '#c69bff'][i % 5], { transmission: 0.2 })); cd.position.set(0.0, 0.06 + i * 0.05, 0.0); cd.rotation.y = (i % 2) * 0.1; cds.add(cd); }
+  addKnockable('y2k', cds, 2.1, 0, 2.55, 0.1, 0.72, 50, 'ceramic');
+
+  const manga = new THREE.Group();   // a wobbly stack of comic volumes with plain coloured spines
+  for (let i = 0; i < 7; i++) { const v = S(new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.025, 0.19), pastel(['#ffffff', '#ff9fcf', '#7ff4ff', '#fff3a6'][i % 4]))); v.position.y = 0.0125 + i * 0.026; v.rotation.y = (Math.random() - 0.5) * 0.3; manga.add(v); }
+  addKnockable('y2k', manga, 0.6, 0, 0.9, 0.11, 0.19, 20, 'floor');
+
+  const pager = new THREE.Group();   // translucent pager clipped to... nothing, lying on a cushion
+  const pg = S(new THREE.Mesh(new RoundedBoxGeometry(0.07, 0.02, 0.045, 2, 0.006), candy('#b6ff8a'))); pg.position.y = 0.01; pager.add(pg);
+  addKnockable('y2k', pager, -2.3, 0.08, 1.6, 0.05, 0.03, 10, 'ceramic', 0.08);
+
+  return {
+    update(dt, t) {
+      if (!g.visible) return;
+      for (let i = 0; i < blobs.length; i++) {                   // lava blobs drift up and down at different speeds
+        const b = blobs[i]; b.position.y = 0.16 + (Math.sin(t * (0.35 + i * 0.13) + i * 2) * 0.5 + 0.5) * 0.15;
+        b.position.x = Math.sin(t * 0.7 + i) * 0.012; b.scale.y = 1 + Math.sin(t * 1.3 + i) * 0.25;
+      }
+      for (let i = 0; i < fairy.length; i++) fairy[i].material.emissiveIntensity = 1.2 + Math.sin(t * 2.2 + i * 1.7) * 0.9;
+      pcScreen.material.color.setScalar(0.92 + Math.sin(t * 50) * 0.04);   // subtle CRT flicker
+      tvScreen.material.color.setScalar(0.9 + Math.sin(t * 37 + 1) * 0.05);
+      gameTex.offset.x = (Math.floor(t * 4) % 4) * 0.002;
+      for (let k = 0; k < beadStrands.length; k++) beadStrands[k].rotation.x = Math.sin(t * 1.4 + k * 0.6) * 0.04;
+    },
+  };
+})();
 
 /* ---- Grass field: instanced wind-swept blades, distant hills, utility poles and wires ---- */
 const grassTime = { value: 0 };
@@ -3073,7 +3250,7 @@ function applyScenario(name) {
   const s = SCENARIOS[name]; if (!s) return;
   for (const [k, g] of Object.entries(envGroups)) g.visible = k === name;
   floorMat.map = FLOOR_TEX[name]; floorMat.needsUpdate = true;
-  floorMat.roughness = ['field', 'park', 'snow', 'campfire'].includes(name) ? 0.95 : 0.4;   // outdoor ground is matte
+  floorMat.roughness = ['field', 'park', 'snow', 'campfire', 'y2k'].includes(name) ? 0.95 : 0.4;   // outdoor ground and tatami are matte
   scene.background.set(s.bg); scene.fog.color.set(s.bg);
   scene.fog.near = s.fog ? s.fog[0] : 7; scene.fog.far = s.fog ? s.fog[1] : 16;
   hemi.intensity = s.hemi;
@@ -3339,7 +3516,7 @@ const LensShader = {
       gl_FragColor = c;
     }`,
 };
-const BLOOM_BY_SCENE = { tokyo: 0.6, campfire: 0.55, aim: 0.45, nyc: 0.4, paris: 0.35 };
+const BLOOM_BY_SCENE = { y2k: 0.28, tokyo: 0.6, campfire: 0.55, aim: 0.45, nyc: 0.4, paris: 0.35 };
 let composer = null, pp = null, PP = null, ppLoading = null;
 function loadPostFX() {
   ppLoading ??= Promise.all(['EffectComposer', 'RenderPass', 'GTAOPass', 'OutputPass', 'UnrealBloomPass', 'ShaderPass']
@@ -3429,6 +3606,7 @@ function frame() {
   grassTime.value = t;
   updateTrainer(dt, t);
   updateDrips(dt, t);
+  y2k.update(dt, t);
   updatePreview();
 
   for (const k of IMPACT_TYPES) impacts[k] = 0;
