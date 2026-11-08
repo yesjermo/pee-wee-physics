@@ -132,7 +132,7 @@
     <div class="row"><label>Figure</label><select data-key="figure" id="figureSel">
       <option value="male">Male (standing)</option><option value="female">Female (sitting on the toilet)</option></select></div>
     <div class="row"><label>Skin / costume</label><select data-key="skinStyle">
-      <option value="skin">Realistic skin</option><option value="clay">Clay sculpt</option><option value="muscle">Muscle anatomy</option>
+      <option value="sculpt">Anatomy sculpt (default)</option><option value="skin">Skin tone</option><option value="clay">Clay sculpt</option><option value="muscle">Muscle anatomy</option>
       <option value="skeleton">Skeleton</option><option value="gold">Gold statue</option><option value="chrome">Chrome</option>
       <option value="gloop">Gloop costume (purple)</option></select></div>
     <div class="row"><label>Pose (standing figure)</label><select data-key="pose">
@@ -160,7 +160,8 @@
       <option value="roll">Cartwheel</option><option value="tumble">Tumble (all axes)</option></select></div>
     <div class="row"><label>Spin speed / direction <span id="v-spinSpeed"></span></label><input type="range" data-key="spinSpeed" min="-4" max="4" step="0.05"></div>
     <div class="note" style="min-height:0">Tip: drag the person: left/right turns, up/down flips them upside down. Flick to keep spinning.</div>
-    <label class="check"><input type="checkbox" data-key="autoAim"> Auto-aim at nearest target</label>
+    <label class="check"><input type="checkbox" data-key="autoAim"> Auto-aim at nearest reachable target</label>
+    <label class="check"><input type="checkbox" data-key="autoFire"> 🎯 Auto-target mode (aims and fires by itself)</label>
     <div class="btns"><button id="btnResetTargets" style="flex:1">↺ Reset targets</button></div>
   </section>
   <section>
@@ -336,11 +337,14 @@ const SCENARIOS = {
   campfire: { label: '🔥 Campfire (put it out)', bg: '#05060a', hemi: 0.25 },
   snow:     { label: '❄️ Snow field (snowman)', bg: '#1c2634', hemi: 1.1 },
   range:    { label: '🟢 Slime target range',  bg: '#0b0f18', hemi: 0.65 },
+  nyc:      { label: '🗽 New York street',      bg: '#1d2738', hemi: 0.8,  fog: [10, 45] },
+  tokyo:    { label: '🏮 Tokyo neon alley',     bg: '#06050d', hemi: 0.35, fog: [8, 40], key: 0.35 },
+  paris:    { label: '🥐 Paris boulevard',      bg: '#2b3552', hemi: 0.75, fog: [12, 75] },
 };
 
 const state = {
-  figure: 'male', skinStyle: 'skin', pose: 'idle', expression: 'auto', studio: false,
-  scenario: 'bathroom', yaw: 0, flip: 0, roll: 0, spin: false, spinAxis: 'yaw', spinSpeed: 0.7, autoAim: false,
+  figure: 'male', skinStyle: 'sculpt', pose: 'idle', expression: 'auto', studio: false,
+  scenario: 'bathroom', yaw: 0, flip: 0, roll: 0, spin: false, spinAxis: 'yaw', spinSpeed: 0.7, autoAim: false, autoFire: false,
   weight: 0.45, waist: 0.45, belly: 0.3, skin: 1,
   hydration: 0.6, fill: 0.55, aim: -0.42, bodyWater: 1,
   power: 1, duration: 0, preview: true, bowl: 0, flood: 0,
@@ -417,6 +421,9 @@ const FLOOR_TEX = {
   campfire: canvasTex(speckle('#3a2c1e', ['#4a3826', '#2c2016', '#5a4630'], 2200, 6), 12),
   snow:     canvasTex(speckle('#e9eef5', ['#ffffff', '#d6dfeb', '#c9d5e6'], 1800, 6), 10),
   range:    canvasTex(tile('#2a2f38', '#20242c'), 10),
+  nyc:      canvasTex(tile('#76777b', '#5c5d61'), 14),
+  tokyo:    canvasTex(tile('#3a3b42', '#2b2c32'), 16),
+  paris:    canvasTex(speckle('#8a8378', ['#9b9488', '#77705f', '#a8a090'], 2600, 7), 14),
 };
 const floorMat = new THREE.MeshStandardMaterial({ map: FLOOR_TEX.bathroom, roughness: 0.4, metalness: 0.05 });
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), floorMat);
@@ -672,13 +679,187 @@ function makeGloop() {
   }
   return g;
 }
-function popMonster() { score.down++; this.timer = 2 + Math.random() * 2; for (let i = 0; i < 6; i++) puff(this.pos, this.popColor, 0.3); this.mesh.visible = false; }
+function popMonster() { score.down++; this.timer = 2 + Math.random() * 2; this.popT = 0.4; for (let i = 0; i < 8; i++) puff(this.pos, this.popColor, 0.35); }
 for (let i = 0; i < 2; i++) {
   const g = makeGloop(); envGroups.range.add(g);
   const t = addTarget({ scene: 'range', shape: 'sphere', pos: new THREE.Vector3(), r: 0.2, maxHp: 220, sound: 'water', mesh: g, slime: true,
     baseR: 0.22, baseY: 0.27, popColor: '#c38cff', speed: 0.12, walk: true, onDestroy: popMonster });
   respawnSlime(t); slimes.push(t);
 }
+
+/* ---- City streets: New York, Tokyo, Paris ---- */
+function addKnockable(scene, mesh, x, y, z, r, h, hp, sound, rest = 0.03) {
+  envGroups[scene].add(mesh);
+  const home = new THREE.Vector3(x, y, z);
+  mesh.position.copy(home);
+  const t = addTarget({ scene, shape: 'cyl', pos: home.clone(), home, r, h, maxHp: hp, sound, mesh, yOff: 0, rest,
+    vel: new THREE.Vector3(), spin: new THREE.Vector3(), onDestroy: knockOff });
+  knockables.push(t); return t;
+}
+function addSolid(scene, shape, x, y, z, dims, sound = 'ceramic') {
+  return addTarget(shape === 'box'
+    ? { scene, shape: 'box', pos: new THREE.Vector3(x, y, z), half: new THREE.Vector3(...dims), maxHp: Infinity, sound }
+    : { scene, shape: 'cyl', pos: new THREE.Vector3(x, y, z), r: dims[0], h: dims[1], maxHp: Infinity, sound });
+}
+function facadeTextures(wall, lit, dark, cols, rows, extra) {
+  const rnd = Array.from({ length: cols * rows }, Math.random);
+  const draw = glow => g => {
+    g.fillStyle = glow ? '#000' : wall; g.fillRect(0, 0, 256, 256);
+    const cw = 256 / cols, rh = 256 / rows;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const on = rnd[r * cols + c] < 0.45;
+      g.fillStyle = glow ? (on ? lit : '#000') : (on ? lit : dark);
+      g.fillRect(c * cw + cw * 0.25, r * rh + rh * 0.22, cw * 0.5, rh * 0.55);
+    }
+    if (!glow && extra) extra(g, cw, rh);
+  };
+  return { map: canvasTex(draw(false), 1), glow: canvasTex(draw(true), 1) };
+}
+function buildCity(key, cfg) {
+  const g = envGroups[key];
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(40, 3.4), std('#25272c', { roughness: 0.85 }));
+  road.rotation.x = -Math.PI / 2; road.position.set(0, 0.004, 3.5); road.receiveShadow = true; g.add(road);
+  const paint = std('#e9e4d0', { roughness: 0.6 });
+  for (let x = -19; x < 20; x += 2.2) { const d = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.1), paint); d.rotation.x = -Math.PI / 2; d.position.set(x, 0.006, 3.5); g.add(d); }
+  for (let i = 0; i < 7; i++) { const s = new THREE.Mesh(new THREE.PlaneGeometry(0.35, 3.0), paint); s.rotation.x = -Math.PI / 2; s.position.set(-4.5 + i * 0.6, 0.006, 3.5); g.add(s); }
+  const curb = shadowed(new THREE.Mesh(new THREE.BoxGeometry(40, 0.12, 0.22), std('#8d9096'))); curb.position.set(0, 0.06, 1.75); g.add(curb);
+  const tex = facadeTextures(cfg.wall, cfg.lit, cfg.dark, 4, 6, cfg.facadeExtra);
+  const mat = new THREE.MeshStandardMaterial({ map: tex.map, emissiveMap: tex.glow, emissive: '#ffffff', emissiveIntensity: cfg.glow ?? 0.7, roughness: 0.85 });
+  const roofMat = std(cfg.roof);
+  for (const [front, dir] of [[-2.8, -1], [6.8, 1]]) {
+    for (let x = -14; x < 14;) {
+      const w = 2.6 + Math.random() * 1.6, h = cfg.h[0] + Math.random() * (cfg.h[1] - cfg.h[0]), cz = front + dir * 1.5;
+      const b = shadowed(new THREE.Mesh(new THREE.BoxGeometry(w, h, 3), mat)); b.position.set(x + w / 2, h / 2, cz); g.add(b);
+      if (cfg.mansard) {
+        const m = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.72, 1, 4), roofMat));
+        m.rotation.y = Math.PI / 4; m.scale.set(w * 0.98, 1.1, 2.9); m.position.set(x + w / 2, h + 0.55, cz); g.add(m);
+      } else { const cap = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, 0.15, 3.1), roofMat); cap.position.set(x + w / 2, h + 0.07, cz); g.add(cap); }
+      x += w + 0.05;
+    }
+  }
+  cfg.extras(g);
+}
+function makeLamp(color = '#2b3a33', glow = '#ffd99a') {
+  const g = new THREE.Group(), m = std(color, { metalness: 0.6, roughness: 0.4 });
+  const pole = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.07, 3.2, 12), m)); pole.position.y = 1.6; g.add(pole);
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.16, 0.3, 6), m); head.position.y = 3.3; g.add(head);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 10), new THREE.MeshBasicMaterial({ color: glow })); bulb.position.y = 3.15; g.add(bulb);
+  return g;
+}
+function makeCar(color, taxi) {
+  const g = new THREE.Group(), paintM = new THREE.MeshPhysicalMaterial({ color, roughness: 0.3, clearcoat: 1, metalness: 0.3 });
+  const glass = new THREE.MeshPhysicalMaterial({ color: '#1b2430', roughness: 0.05, metalness: 0.5 });
+  const tire = std('#111', { roughness: 0.9 }), rim = std('#bbbbbb', { metalness: 1, roughness: 0.3 });
+  const bodyM = shadowed(new THREE.Mesh(new RoundedBoxGeometry(1.9, 0.42, 0.82, 3, 0.08), paintM)); bodyM.position.y = 0.42; g.add(bodyM);
+  const cab = shadowed(new THREE.Mesh(new RoundedBoxGeometry(1.05, 0.36, 0.76, 3, 0.1), glass)); cab.position.set(-0.05, 0.78, 0); g.add(cab);
+  const roof = new THREE.Mesh(new RoundedBoxGeometry(0.95, 0.05, 0.72, 2, 0.02), paintM); roof.position.set(-0.05, 0.97, 0); g.add(roof);
+  if (taxi) { const sign = new THREE.Mesh(new RoundedBoxGeometry(0.3, 0.1, 0.12, 2, 0.02), new THREE.MeshBasicMaterial({ color: '#fff2a8' })); sign.position.set(-0.05, 1.05, 0); g.add(sign); }
+  for (const x of [-0.6, 0.6]) for (const z of [-0.4, 0.4]) {
+    const w = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.12, 20), tire)); w.rotation.x = Math.PI / 2; w.position.set(x, 0.18, z); g.add(w);
+    const r = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.13, 12), rim); r.rotation.x = Math.PI / 2; r.position.copy(w.position); g.add(r);
+  }
+  for (const s of [-1, 1]) for (const z of [-0.25, 0.25]) {
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.08, 0.16), new THREE.MeshBasicMaterial({ color: s > 0 ? '#fff6d0' : '#ff3030' })); l.position.set(s * 0.95, 0.48, z); g.add(l);
+  }
+  return g;
+}
+function makeTrashCan(color = '#7d838b') {
+  const g = new THREE.Group(), m = std(color, { metalness: 0.7, roughness: 0.35 });
+  const c = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.17, 0.6, 18), m)); c.position.y = 0.3; g.add(c);
+  const lid = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.21, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2), m)); lid.position.y = 0.6; lid.scale.y = 0.35; g.add(lid);
+  return g;
+}
+function makeHydrant(color = '#c92a2a') {
+  const g = new THREE.Group(), m = std(color, { roughness: 0.4, metalness: 0.3 });
+  const b = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.09, 0.42, 20), m)); b.position.y = 0.21; g.add(b);
+  const c = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.08, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), m)); c.position.y = 0.42; g.add(c);
+  const n = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.24, 12), m)); n.rotation.z = Math.PI / 2; n.position.y = 0.3; g.add(n);
+  return g;
+}
+
+// New York: brick walk-ups with fire escapes, a parked yellow cab, hydrant, trash cans, cones
+buildCity('nyc', {
+  wall: '#7a4536', lit: '#ffd58a', dark: '#1d2430', roof: '#3a2a24', h: [6, 13], glow: 0.6,
+  facadeExtra(g, cw, rh) { g.strokeStyle = '#1b1b1b'; g.lineWidth = 3; for (let r = 1; r < 6; r++) { g.beginPath(); g.moveTo(cw * 1.1, r * rh); g.lineTo(cw * 2.9, r * rh); g.stroke(); g.beginPath(); g.moveTo(cw * 1.2, r * rh); g.lineTo(cw * 2.8, (r + 1) * rh - 4); g.stroke(); } },
+  extras(g) {
+    const cab = makeCar('#f2c418', true); cab.position.set(0.4, 0, 2.3); g.add(cab); addSolid('nyc', 'box', 0.4, 0, 2.3, [0.95, 0.55, 0.42]);
+    const hy = makeHydrant(); hy.position.set(-1.0, 0, 1.25); g.add(hy); addSolid('nyc', 'cyl', -1.0, 0, 1.25, [0.1, 0.48]);
+    for (const [x, z] of [[1.25, 1.0], [-1.7, 0.5]]) addKnockable('nyc', makeTrashCan(), x, 0, z, 0.22, 0.65, 60, 'ceramic');
+    for (const [x, z] of [[-0.5, 1.45], [1.7, 1.45]]) addKnockable('nyc', makeCone(), x, 0, z, 0.11, 0.38, 40, 'floor');
+    for (const x of [-4, 4]) { const l = makeLamp('#1d1f22', '#ffe2a8'); l.position.set(x, 0, 1.55); g.add(l); }
+    const pl = new THREE.PointLight('#ffcf8a', 3, 9, 1.5); pl.position.set(0, 3, 1.5); g.add(pl);
+  },
+});
+
+// Tokyo: narrow neon alley, glowing vending machine, paper lanterns (crank power to reach them), bins
+buildCity('tokyo', {
+  wall: '#3b3d45', lit: '#bfe9ff', dark: '#14161c', roof: '#222428', h: [5, 11], glow: 0.9,
+  extras(g) {
+    const neonCols = ['#ff2d95', '#22e1ff', '#ffe23d', '#9b5cff', '#3dff8a'];
+    for (let i = 0; i < 12; i++) {
+      const c = neonCols[i % neonCols.length], tall = Math.random() < 0.5;
+      const n = new THREE.Mesh(new THREE.BoxGeometry(tall ? 0.35 : 1.4, tall ? 1.6 : 0.35, 0.08), new THREE.MeshBasicMaterial({ color: c }));
+      const front = i < 6;
+      n.position.set(-6 + (i % 6) * 2.4 + Math.random(), 2.2 + Math.random() * 2.5, front ? -2.74 : 6.74); g.add(n);
+    }
+    for (const [c, x, z] of [['#ff2d95', -2, -2.2], ['#22e1ff', 2, 6.2]]) { const l = new THREE.PointLight(c, 6, 9, 1.4); l.position.set(x, 2.6, z); g.add(l); }
+    const vm = new THREE.Group();
+    const box = shadowed(new THREE.Mesh(new RoundedBoxGeometry(0.7, 1.8, 0.9, 3, 0.04), std('#e8edf3', { roughness: 0.3 }))); box.position.y = 0.9; vm.add(box);
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 1.1), new THREE.MeshBasicMaterial({ color: '#9fe8ff' })); panel.rotation.y = Math.PI / 2; panel.position.set(0.355, 1.15, 0); vm.add(panel);
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) {
+      const can = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.12, 10), std(neonCols[(r + c) % 5])); can.position.set(0.37, 1.45 - r * 0.3, -0.27 + c * 0.18); vm.add(can);
+    }
+    vm.position.set(-1.5, 0, 0.9); g.add(vm); addSolid('tokyo', 'box', -1.5, 0, 0.9, [0.36, 0.9, 0.46]);
+    const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 4, 6), std('#111')); wire.rotation.z = Math.PI / 2; wire.position.set(0.4, 2.45, 1.35); g.add(wire);
+    for (const x of [-0.5, 0.4, 1.3]) {
+      const lan = new THREE.Group();
+      const shell = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), new THREE.MeshStandardMaterial({ color: '#e0262b', emissive: '#ff5a2a', emissiveIntensity: 0.8, roughness: 0.6 }));
+      shell.scale.y = 1.3; shell.position.y = 0.17; lan.add(shell);
+      for (const y of [0, 0.34]) { const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.03, 12), std('#111')); cap.position.y = y; lan.add(cap); }
+      addKnockable('tokyo', lan, x, 1.2, 1.35, 0.15, 0.36, 35, 'floor', 0.13);
+      const str = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.9, 4), std('#111')); str.position.set(x, 2.0, 1.35); g.add(str);
+    }
+    for (const [x, z, c] of [[1.2, 1.0, '#2b6fd6'], [1.55, 0.45, '#2fa35a']]) addKnockable('tokyo', makeTrashCan(c), x, 0, z, 0.22, 0.65, 60, 'ceramic');
+    addKnockable('tokyo', makeCone(), -0.4, 0, 1.4, 0.11, 0.38, 40, 'floor');
+  },
+});
+
+// Paris: cream Haussmann façades with mansard roofs, café table with wine bottles, chairs, lamp posts, distant iron tower
+buildCity('paris', {
+  wall: '#e6dcc4', lit: '#ffe7b0', dark: '#5d6a7a', roof: '#5f6f86', h: [7, 10], glow: 0.45, mansard: true,
+  facadeExtra(g, cw, rh) { g.strokeStyle = '#2a2a2a'; g.lineWidth = 2; for (let r = 1; r < 6; r += 2) { g.beginPath(); g.moveTo(0, r * rh + rh * 0.8); g.lineTo(256, r * rh + rh * 0.8); g.stroke(); } },
+  extras(g) {
+    for (const x of [-1.4, 1.7]) { const l = makeLamp('#1f2a26', '#ffe9b8'); l.position.set(x, 0, 1.5); g.add(l); addSolid('paris', 'cyl', x, 0, 1.5, [0.09, 3.3]); }
+    const table = new THREE.Group(), iron = std('#1e1e1e', { metalness: 0.7, roughness: 0.4 });
+    const top = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.03, 28), std('#f1efe8', { roughness: 0.3 }))); top.position.y = 0.73; table.add(top);
+    const leg = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.72, 10), iron)); leg.position.y = 0.36; table.add(leg);
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.03, 18), iron); foot.position.y = 0.015; table.add(foot);
+    table.position.set(0.6, 0, 1.3); g.add(table); addSolid('paris', 'cyl', 0.6, 0, 1.3, [0.33, 0.75]);
+    for (const [x, z] of [[0.5, 1.22], [0.7, 1.38], [0.62, 1.12]]) {
+      const b = new THREE.Group(), glass = new THREE.MeshPhysicalMaterial({ color: '#1f5a2a', roughness: 0.05, transmission: 0.3, thickness: 0.02 });
+      const body2 = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.2, 14), glass)); body2.position.y = 0.1; b.add(body2);
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.03, 0.1, 10), glass); neck.position.y = 0.25; b.add(neck);
+      addKnockable('paris', b, x, 0.745, z, 0.05, 0.3, 18, 'ceramic', 0.035);
+    }
+    for (const [x, z, ry] of [[0.1, 1.0, 0.6], [1.15, 1.55, -2.2]]) {
+      const ch = new THREE.Group(), wicker = std('#b8864b', { roughness: 0.8 });
+      const seat = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.04, 18), wicker)); seat.position.y = 0.45; ch.add(seat);
+      const back = shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.025, 8, 20, Math.PI), wicker)); back.position.set(0, 0.62, -0.17); ch.add(back);
+      for (const [lx, lz] of [[-0.14, -0.14], [0.14, -0.14], [-0.14, 0.14], [0.14, 0.14]]) { const l = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.45, 6), iron); l.position.set(lx, 0.225, lz); ch.add(l); }
+      ch.rotation.y = ry;
+      addKnockable('paris', ch, x, 0, z, 0.22, 0.85, 50, 'floor');
+    }
+    // Distant wrought-iron lattice tower (wireframe tapered sections read as ironwork)
+    const ironwork = new THREE.MeshBasicMaterial({ color: '#c9925a', wireframe: true });
+    const tower = new THREE.Group();
+    for (const [rt, rb, h, y] of [[3.6, 7.5, 12, 6], [1.6, 3.6, 16, 20], [0.3, 1.6, 22, 39]]) {
+      const sec = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 4, 8, true), ironwork); sec.rotation.y = Math.PI / 4; sec.position.y = y; tower.add(sec);
+    }
+    for (const y of [12, 28]) { const p = new THREE.Mesh(new THREE.BoxGeometry(y < 20 ? 7 : 3.4, 0.8, y < 20 ? 7 : 3.4), new THREE.MeshBasicMaterial({ color: '#d8a46a' })); p.position.y = y; tower.add(p); }
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), new THREE.MeshBasicMaterial({ color: '#fff3c4' })); tip.position.y = 51; tower.add(tip);
+    tower.position.set(-9, 0, 48); g.add(tower);
+  },
+});
 
 function respawnSlime(t) {
   const a = Math.random() * Math.PI * 2, r = 2.6 + Math.random() * 1.2;
@@ -690,19 +871,30 @@ function resetTargets() {
   for (const t of targets) { t.hp = t.maxHp; t.dead = false; t.timer = 0; }
   for (const c of knockables) { c.pos.copy(c.home); c.mesh.position.copy(c.home).setY(c.home.y + c.yOff); c.mesh.rotation.set(0, 0, 0); }
   slimes.forEach(respawnSlime);
-  snowman.grp.scale.set(1, 1, 1); snowman.snowMat.color.set('#f4f7fb');
+  snowman.grp.scale.set(1, 1, 1); snowman.grp.visible = true; snowman.snowMat.color.set('#f4f7fb');
   score.hits = score.down = 0;
 }
 
 /** First target containing the point, in the active scenario. */
+const _ap = new THREE.Vector3();
+/** Point auto-aim should aim at for a target. */
+function aimPoint(t) {
+  if (t.shape === 'sphere') return _ap.copy(t.pos);
+  if (t.shape === 'box') return _ap.copy(t.pos).setY(t.pos.y + t.half.y);
+  return _ap.copy(t.pos).setY(t.pos.y + t.h * 0.5);
+}
+
+/** First target containing the point, in the active scenario. Spheres get a little padding so shrunken slimes stay hittable. */
 function hitTarget(x, y, z) {
   for (let i = 0; i < targets.length; i++) {
     const t = targets[i];
     if (t.dead || t.scene !== state.scenario) continue;
     const p = t.pos;
     if (t.shape === 'sphere') {
-      const dx = x - p.x, dy = y - p.y, dz = z - p.z;
-      if (dx * dx + dy * dy + dz * dz < t.r * t.r) return t;
+      const dx = x - p.x, dy = y - p.y, dz = z - p.z, r = t.r + 0.04;
+      if (dx * dx + dy * dy + dz * dz < r * r) return t;
+    } else if (t.shape === 'box') {
+      if (Math.abs(x - p.x) < t.half.x && Math.abs(z - p.z) < t.half.z && y > p.y && y < p.y + t.half.y * 2) return t;
     } else if (y > p.y && y < p.y + t.h) {
       const dx = x - p.x, dz = z - p.z;
       if (dx * dx + dz * dz < t.r * t.r) return t;
@@ -728,10 +920,15 @@ function updateTargets(dt, t) {
   const sm = snowman.target;
   snowman.snowMat.color.set('#f4f7fb').lerp(_tmp.set('#f2dc5a'), 1 - (sm.dead ? 0 : sm.hp / sm.maxHp));
   if (sm.dead) {
-    snowman.grp.scale.y = Math.max(0.2, snowman.grp.scale.y - dt * 0.5);
-    snowman.grp.scale.x = snowman.grp.scale.z = 1 + (1 - snowman.grp.scale.y) * 0.6;
+    // Melt all the way down into a yellow slush puddle, then rebuild
+    if (snowman.grp.visible) {
+      snowman.grp.scale.y = Math.max(0.03, snowman.grp.scale.y - dt * 0.7);
+      snowman.grp.scale.x = snowman.grp.scale.z = 1 + (1 - snowman.grp.scale.y) * 0.7;
+      if (state.scenario === 'snow') { puddleState.volume += dt * 40; puddleState.center.lerp(_v.set(0, 0.002, 1.1), 0.1); }
+      if (snowman.grp.scale.y <= 0.03) snowman.grp.visible = false;
+    }
     snowman.snowMat.color.set('#f2dc5a');
-    sm.timer -= dt; if (sm.timer <= 0) { sm.dead = false; sm.hp = sm.maxHp; snowman.grp.scale.set(1, 1, 1); }
+    sm.timer -= dt; if (sm.timer <= 0) { sm.dead = false; sm.hp = sm.maxHp; snowman.grp.scale.set(1, 1, 1); snowman.grp.visible = true; }
   }
 
   // Cans: knocked off with ballistic motion, then reset
@@ -751,14 +948,21 @@ function updateTargets(dt, t) {
 
   // Slimes: creep toward the player, shrink when hit, pop, respawn
   for (const s of slimes) {
-    if (s.dead) { s.timer -= dt; if (s.timer <= 0) respawnSlime(s); continue; }
+    if (s.dead) {
+      if (s.popT > 0) {                                        // splat: flatten and vanish
+        s.popT -= dt; const k = Math.max(0.01, s.popT / 0.4);
+        s.mesh.scale.set(k * 1.4, k * 0.35, k * 1.4);
+        if (s.popT <= 0) s.mesh.visible = false;
+      }
+      s.timer -= dt; if (s.timer <= 0) respawnSlime(s); continue;
+    }
     const m = s.mesh, dist = Math.hypot(m.position.x, m.position.z);
     if (state.scenario === 'range' && !state.dissolved && dist > 0.75) {
       m.position.x -= (m.position.x / dist) * (s.speed || 0.18) * dt;
       m.position.z -= (m.position.z / dist) * (s.speed || 0.18) * dt;
     }
     m.rotation.y = Math.atan2(-m.position.x, -m.position.z);
-    const k = 0.45 + 0.55 * (s.hp / s.maxHp), wob = 1 + 0.06 * Math.sin(t * 6 + dist * 3);
+    const k = 0.62 + 0.38 * (s.hp / s.maxHp), wob = 1 + 0.06 * Math.sin(t * 6 + dist * 3);
     m.scale.set(k * wob, k / wob, k * wob);
     if (s.walk) m.position.y = Math.abs(Math.sin(t * 8 + dist)) * 0.035;
     s.r = (s.baseR || 0.2) * k; s.pos.set(m.position.x, (s.baseY || 0.15) * k, m.position.z);
@@ -817,7 +1021,18 @@ const muscleTex = canvasTex(g => {
   }
   for (let i = 0; i < 14; i++) { g.fillStyle = 'rgba(235,225,205,0.55)'; g.fillRect(0, Math.random() * 256, 256, 2 + Math.random() * 3); }  // tendons
 }, 3);
+/* ZBrush-style grey matcap: soft key light top-left, falloff and a faint rim */
+const sculptMatcap = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+  let grd = g.createRadialGradient(96, 84, 6, 128, 128, 128);
+  grd.addColorStop(0, '#fbfbfb'); grd.addColorStop(0.35, '#cfcfcf'); grd.addColorStop(0.75, '#7c7c7c'); grd.addColorStop(1, '#2e2e2e');
+  g.fillStyle = grd; g.beginPath(); g.arc(128, 128, 128, 0, Math.PI * 2); g.fill();
+  grd = g.createRadialGradient(150, 170, 90, 128, 128, 128); grd.addColorStop(0, 'rgba(255,255,255,0)'); grd.addColorStop(1, 'rgba(220,225,235,0.35)');
+  g.fillStyle = grd; g.fill();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
 const SKIN_MATS = {
+  sculpt:   new THREE.MeshMatcapMaterial({ matcap: sculptMatcap, color: '#e4e4e4' }),
   clay:     new THREE.MeshStandardMaterial({ color: '#b8bbc0', roughness: 0.55, metalness: 0 }),
   muscle:   new THREE.MeshPhysicalMaterial({ map: muscleTex, roughness: 0.38, clearcoat: 0.5, sheen: 0.4, sheenColor: new THREE.Color('#ff9a8a') }),
   skeleton: new THREE.MeshPhysicalMaterial({ color: '#9fd3ff', transparent: true, opacity: 0.1, roughness: 0.1, depthWrite: false, side: THREE.DoubleSide }),
@@ -857,6 +1072,59 @@ function makeAnchor(bone, root) {
 /* ---- Skeleton costume: skull, ribcage, pelvis ride on bone anchors; long bones are rebuilt each frame ---- */
 const boneMat = new THREE.MeshStandardMaterial({ color: '#ece3c8', roughness: 0.5 });
 const socketMat = new THREE.MeshBasicMaterial({ color: '#1a1410' });
+/* Sculpted muscle definition for the male rig, in root space at the bind (T-) pose:
+   [bone, x, y, z, radiusX, radiusY, radiusZ, rotZ, mirror ('both' = same bone both sides, 'lr' = Left→Right bone)] */
+const MUSCLES = [
+  // chest: pectoralis major (clavicular + sternal heads)
+  ['Spine2', 0.062, 1.36, 0.106, 0.058, 0.028, 0.02, -0.1, 'both'],
+  ['Spine2', 0.074, 1.322, 0.11, 0.068, 0.04, 0.024, -0.22, 'both'],
+  // rectus abdominis: 8-pack in four rows either side of the linea alba
+  ['Spine1', 0.027, 1.235, 0.114, 0.021, 0.022, 0.012, 0, 'both'],
+  ['Spine1', 0.027, 1.185, 0.094, 0.021, 0.022, 0.012, 0, 'both'],
+  ['Spine', 0.027, 1.13, 0.088, 0.021, 0.024, 0.012, 0, 'both'],
+  ['Spine', 0.026, 1.075, 0.1, 0.019, 0.026, 0.011, 0, 'both'],
+  // serratus anterior "fingers", external obliques and the inguinal V-lines
+  ['Spine1', 0.112, 1.27, 0.07, 0.024, 0.01, 0.012, 0.5, 'both'],
+  ['Spine1', 0.116, 1.24, 0.066, 0.024, 0.01, 0.012, 0.5, 'both'],
+  ['Spine1', 0.118, 1.21, 0.06, 0.024, 0.01, 0.012, 0.5, 'both'],
+  ['Spine', 0.1, 1.1, 0.06, 0.03, 0.06, 0.026, 0.15, 'both'],
+  // back & neck: lats, trapezius, sternocleidomastoid
+  ['Spine1', 0.12, 1.25, -0.04, 0.035, 0.1, 0.05, 0.1, 'both'],
+  ['Spine2', 0.07, 1.47, -0.07, 0.055, 0.025, 0.035, 0.4, 'both'],
+  ['Neck', 0.024, 1.53, 0.005, 0.011, 0.05, 0.011, -0.35, 'both'],
+  // glutes
+  ['Hips', 0.066, 0.93, -0.088, 0.065, 0.065, 0.04, 0, 'both'],
+  // arms: deltoid, biceps, triceps, brachioradialis, forearm flexors
+  ['LeftArm', 0.19, 1.44, -0.065, 0.06, 0.055, 0.055, 0, 'lr'],
+  ['LeftArm', 0.32, 1.434, -0.045, 0.075, 0.03, 0.03, 0, 'lr'],
+  ['LeftArm', 0.31, 1.43, -0.105, 0.08, 0.03, 0.03, 0, 'lr'],
+  ['LeftForeArm', 0.53, 1.45, -0.07, 0.07, 0.026, 0.028, 0, 'lr'],
+  ['LeftForeArm', 0.56, 1.42, -0.065, 0.075, 0.024, 0.026, 0, 'lr'],
+  // legs: rectus femoris, vastus lateralis, vastus medialis teardrop, sartorius, tibialis, gastrocnemius heads
+  ['LeftUpLeg', 0.095, 0.74, 0.072, 0.034, 0.15, 0.028, 0, 'lr'],
+  ['LeftUpLeg', 0.115, 0.72, 0.04, 0.032, 0.13, 0.026, 0, 'lr'],
+  ['LeftUpLeg', 0.07, 0.6, 0.058, 0.03, 0.05, 0.028, 0, 'lr'],
+  ['LeftLeg', 0.104, 0.33, 0.035, 0.018, 0.1, 0.016, 0, 'lr'],
+  ['LeftLeg', 0.112, 0.39, -0.08, 0.028, 0.08, 0.032, 0, 'lr'],
+  ['LeftLeg', 0.078, 0.39, -0.08, 0.026, 0.075, 0.03, 0, 'lr'],
+];
+function buildMuscles(rig, root) {
+  rig.muscles = []; rig.anchors = {};
+  const geo = new THREE.SphereGeometry(1, 24, 16), bp = new THREE.Vector3();
+  const place = (bone, x, y, z, rx, ry, rz, rot) => {
+    const b = rig.bones['mixamorig' + bone]; if (!b) return;
+    const anchor = rig.anchors[bone] ||= makeAnchor(b.bone, root);
+    root.worldToLocal(b.bone.getWorldPosition(bp));
+    const m = new THREE.Mesh(geo, SKIN_MATS.sculpt);
+    m.position.set(x - bp.x, y - bp.y, z - bp.z - Math.sign(z) * rz * 0.25); m.scale.set(rx * 0.92, ry * 0.95, rz * 0.7); m.rotation.z = rot;
+    m.castShadow = true; m.visible = false; m.renderOrder = 2; anchor.add(m); rig.muscles.push(m);
+  };
+  for (const [bone, x, y, z, rx, ry, rz, rot, mir] of MUSCLES) {
+    place(bone, x, y, z, rx, ry, rz, rot);
+    place(mir === 'lr' ? bone.replace('Left', 'Right') : bone, -x, y, z, rx, ry, rz, -rot);
+  }
+}
+
 function buildSkeletonParts(rig) {
   const add = (anchor, mesh, x, y, z) => { if (!anchor) return mesh; mesh.position.set(x, y, z); mesh.castShadow = true; mesh.visible = false; anchor.add(mesh); rig.skel.push(mesh); return mesh; };
   // Skull: cranium, cheekbones, eye sockets, nasal cavity, jaw, teeth
@@ -1050,6 +1318,7 @@ class HumanFigure {
     for (const l of this.limbs) { l.scale.x = l.scale.z = lf; }
     const bz = 0.85 * (0.45 + 1.1 * state.belly + 0.25 * state.hydration + 0.15 * state.fill) * wf;
     this.bellyM.scale.set(0.95 * wa * wf, 0.9, bz);
+    if (this.rig) this.bellyM.visible = !this.sitting && bz > 0.95;   // on the rig, only show once the belly morph pushes past the torso
 
     const vol = 30 + state.fill * CAPACITY_ML;
     const r = Math.cbrt((3 * vol) / (4 * Math.PI)) / 100 * 1.15;
@@ -1074,7 +1343,7 @@ class HumanFigure {
     this.organs.position.set(hip.x, hip.y - 0.97, hip.z);
     this.bellyM.position.set(hip.x, hip.y + 0.07, hip.z + 0.01);
     if (this.rig) {
-      const g = this.sitting ? 1 : wf * (0.92 + 0.14 * wa);
+      const g = this.sitting ? 1 : (wf * (0.92 + 0.14 * wa)) / 1.12 * (state.skinStyle === 'sculpt' ? 0.9 : 1);
       this.rig.wrap.scale.set(g, 1, g);
       this.rig.wrap.position.y = this.sitting ? SIT.hipY - this.rig.hipY0 : 0;
       if (!state.dissolved) this.mixer.update(dt);
@@ -1107,6 +1376,13 @@ class HumanFigure {
     if (this._censorT > 0.14) { this._censorT = 0; this.censorTex.repaint(); }
     this.censor.visible = !this.sitting && (state.skin > 0.3 || state.view === 'cross');
     // Organs only show when you can see inside (otherwise they can poke through the rig in some poses)
+    // X-ray opacity also applies to the non-skin looks
+    const sm = SKIN_MATS[state.skinStyle];
+    if (sm && state.skinStyle !== 'skeleton') {
+      const tr = state.skin < 0.99;
+      if (sm.transparent !== tr) { sm.transparent = tr; sm.needsUpdate = true; }
+      sm.opacity = state.skin; sm.depthWrite = !tr;
+    }
     this.organs.visible = !this.rig || state.skin < 0.99 || state.skinStyle === 'skeleton' || state.view === 'cross';
   }
 
@@ -1151,6 +1427,7 @@ class HumanFigure {
       const anchor = name => { const b = model.getObjectByName(name); return b ? makeAnchor(b, this.root) : null; };
       rig.headA = anchor('mixamorigHead'); rig.chestA = anchor('mixamorigSpine1'); rig.hipA = anchor('mixamorigHips');
       buildSkeletonParts(rig);
+      if (key === 'male') buildMuscles(rig, this.root);
       this.rigs[key] = rig;
       onDone?.(rig);
     }, undefined, () => this.loadRig(key, urls, i + 1, onDone));
@@ -1178,6 +1455,12 @@ class HumanFigure {
     this.bellyM.material = style === 'skin' ? this.skin : SKIN_MATS[style];
     skeletonViz.set(style === 'skeleton' ? rig : null);
     this.face.visible = !this.sitting && !!rig.headA && style !== 'skeleton';
+    // Sculpted muscle definition rides along in every look except skeleton / costume
+    for (const m of rig.muscles || []) { m.visible = style !== 'skeleton' && style !== 'gloop'; m.material = style === 'skin' ? this.skin : SKIN_MATS[style]; }
+    // Sculpt look: bald grey head like a ZBrush base mesh
+    const sculpt = style === 'sculpt';
+    this.face.traverse(o => { if (o.isMesh) { o.userData.mat0 ||= o.material; o.material = sculpt ? SKIN_MATS.sculpt : o.userData.mat0; } });
+    this.hair.visible = !sculpt;
   }
 
   applyPose() {
@@ -1223,7 +1506,7 @@ class HumanFigure {
 }
 const body = new HumanFigure();
 scene.add(body.pivot);
-window.hydrosim = { body, state, sim, THREE, SIT };   // handy for debugging in the console
+window.hydrosim = { body, state, sim, THREE, SIT, targets, score };   // handy for debugging in the console
 body.rigs = {};
 body.loadRig('male', HUMAN_MODEL_URLS, 0, rig => {
   if (rig && state.figure === 'male') body.activate('male');
@@ -1388,7 +1671,7 @@ function onStreamTarget(i, t) {
   if (t.maxHp !== Infinity) {
     t.hp -= 1 + sim.pressure;      // stronger stream = more "damage"
     score.hits++;
-    if (t.hp <= 0 && !t.dead) { t.dead = true; t.onDestroy?.call(t); }
+    if (t.hp <= t.maxHp * 0.04 && !t.dead) { t.hp = 0; t.dead = true; t.onDestroy?.call(t); }   // last few % finishes it
   }
   stream.life[i] = 0;
 }
@@ -1790,6 +2073,7 @@ function updatePeeBall(t) {
 
 /* ---- Rotation helpers: auto-spin, auto-aim ---- */
 function angleDiff(a, b) { return Math.atan2(Math.sin(b - a), Math.cos(b - a)); }
+const aimLock = { target: null, lastHp: 0, stuck: 0 };
 function updatePose(dt) {
   if (body.sitting) { state.yaw = Math.PI; state.flip = state.roll = 0; sim.yawVel = sim.pitchVel = 0; return; }
   if (state.spin && !spinDrag) {
@@ -1806,22 +2090,32 @@ function updatePose(dt) {
   state.yaw = wrap(state.yaw); state.flip = wrap(state.flip); state.roll = wrap(state.roll);
   if (state.autoAim && !state.dissolved && !spinDrag && Math.abs(sim.yawVel) < 0.3) {
     body.origin.getWorldPosition(_o);
-    let best = null, bd = Infinity;
+    const now = performance.now() / 1000, v = expectedSpeed();
+    // Pick a live target that the stream can actually reach, skip ones we recently gave up on, and stick with the current one
+    let best = null, bestScore = Infinity; const bestPt = new THREE.Vector3();
     for (const t of targets) {
-      if (t.dead || t.scene !== state.scenario || t.maxHp === Infinity) continue;
-      const c = t.shape === 'sphere' ? t.pos : _v.copy(t.pos).setY(t.pos.y + t.h * 0.5);
-      const d = Math.hypot(c.x - _o.x, c.z - _o.z);
-      if (d < bd) { bd = d; best = { x: c.x, y: c.y, z: c.z }; }
+      if (t.dead || t.scene !== state.scenario || t.maxHp === Infinity || (t.ignoreUntil || 0) > now) continue;
+      const c = aimPoint(t), d = Math.max(0.05, Math.hypot(c.x - _o.x, c.z - _o.z)), dy = c.y - _o.y;
+      if (v ** 4 - GRAVITY * (GRAVITY * d * d + 2 * dy * v * v) < 0) continue;          // out of range at this power
+      const sc = d - (t === aimLock.target ? 0.8 : 0);
+      if (sc < bestScore) { bestScore = sc; best = t; bestPt.copy(c); }
     }
+    if (best !== aimLock.target) { aimLock.target = best; aimLock.lastHp = best ? best.hp : 0; aimLock.stuck = 0; }
     if (best) {
-      const yaw = Math.atan2(best.x - _o.x, best.z - _o.z);
-      state.yaw += angleDiff(state.yaw, yaw) * Math.min(1, dt * 4);
+      const d = Math.max(0.05, Math.hypot(bestPt.x - _o.x, bestPt.z - _o.z)), dy = bestPt.y - _o.y;
+      const yaw = Math.atan2(bestPt.x - _o.x, bestPt.z - _o.z);
+      state.yaw += angleDiff(state.yaw, yaw) * Math.min(1, dt * 5);
       // Ballistic aim: θ = atan((v² − √(v⁴ − g(g·d² + 2·dy·v²))) / (g·d))
-      const v = Math.max(sim.speed, 2.6 * (state.overdrive ? OVERDRIVE : 1)), d = Math.max(0.05, bd), dy = best.y - _o.y;
       const disc = v ** 4 - GRAVITY * (GRAVITY * d * d + 2 * dy * v * v);
-      const aim = disc >= 0 ? Math.atan((v * v - Math.sqrt(disc)) / (GRAVITY * d)) : Math.PI / 4;
-      state.aim += (THREE.MathUtils.clamp(aim, -0.8, 0.75) - state.aim) * Math.min(1, dt * 4);
-    }
+      const a = Math.atan((v * v - Math.sqrt(Math.max(0, disc))) / (GRAVITY * d));
+      state.aim += (THREE.MathUtils.clamp(a, -0.8, 0.75) - state.aim) * Math.min(1, dt * 5);
+      // Not taking damage for a while (blocked by the crate, a car, ...)? Give up on it for 3 s and move on
+      if (sim.env > 0.6) {
+        if (best.hp < aimLock.lastHp - 0.5) { aimLock.lastHp = best.hp; aimLock.stuck = 0; }
+        else if ((aimLock.stuck += dt) > 1.2) { best.ignoreUntil = now + 3; aimLock.target = null; }
+      }
+      if (state.autoFire && !state.flowing && Math.abs(angleDiff(state.yaw, yaw)) < 0.2 && (state.fill > 0.05 || state.overdrive)) setValue('flowing', true);
+    } else if (state.autoFire && state.flowing) setValue('flowing', false);   // nothing left to shoot
   }
 }
 
@@ -1853,8 +2147,9 @@ function applyScenario(name) {
   for (const [k, g] of Object.entries(envGroups)) g.visible = k === name;
   floorMat.map = FLOOR_TEX[name]; floorMat.needsUpdate = true;
   scene.background.set(s.bg); scene.fog.color.set(s.bg);
+  scene.fog.near = s.fog ? s.fog[0] : 7; scene.fog.far = s.fog ? s.fog[1] : 16;
   hemi.intensity = s.hemi;
-  key.intensity = name === 'campfire' ? 0.25 : 2.2;
+  key.intensity = s.key ?? (name === 'campfire' ? 0.25 : 2.2);
   puddleState.volume = 0;
   toilet.group.visible = state.surface !== 'floor';
   toilet.water.visible = state.surface === 'water';
@@ -1883,6 +2178,7 @@ function setValue(key, value) {
   if (key === 'flowing' && value && !state.flowing) sim.flowTime = 0;
   state[key] = value;
   if (key === 'surface') { toilet.group.visible = value !== 'floor'; toilet.water.visible = value === 'water'; }
+  if (key === 'autoFire' && value) state.autoAim = true;
   if (key === 'figure') applyFigure(value);
   if (key === 'skinStyle') body.applySkin();
   if (key === 'pose') body.applyPose();
