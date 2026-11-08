@@ -1,12 +1,12 @@
 <div align="center">
 
-# 💛 HydroSim 3D 💛
-### The world's most over-engineered pee simulator
+# 💛 urinal-physics 💛
+### HydroSim 3D: the world's most over-engineered pee simulator
 
 *Real-time bladder physics. Procedural pee acoustics. Spatial audio. Nobody asked for this.*
 
-[![Play it now](https://img.shields.io/badge/▶_PLAY-in_your_browser-f5c14b?style=for-the-badge)](https://yesjermo.github.io/hydrosim-3d/)
-[![Simulator](https://img.shields.io/badge/skip_the_landing_page-straight_to_the_toilet-4fd6e8?style=for-the-badge)](https://yesjermo.github.io/hydrosim-3d/simulator.html)
+[![Play it now](https://img.shields.io/badge/▶_PLAY-in_your_browser-f5c14b?style=for-the-badge)](https://yesjermo.github.io/urinal-physics/)
+[![Simulator](https://img.shields.io/badge/skip_the_landing_page-straight_to_the_toilet-4fd6e8?style=for-the-badge)](https://yesjermo.github.io/urinal-physics/simulator.html)
 
 ![Three.js](https://img.shields.io/badge/three.js-r160-000000?logo=threedotjs&logoColor=white)
 ![Web Audio API](https://img.shields.io/badge/Web_Audio-100%25_synthesized-4fd6e8)
@@ -22,6 +22,11 @@
 ![Flush status](https://img.shields.io/badge/flush_status-PLEASE-ff5d6c)
 ![Toilet](https://img.shields.io/badge/toilet-rendered_in_4K_feelings-white)
 ![Pee ball](https://img.shields.io/badge/pee_ball_mode-unlocked-yellow)
+![Aim](https://img.shields.io/badge/aim-better_than_your_roommate-blueviolet)
+![Splash zone](https://img.shields.io/badge/splash_zone-you-red)
+![Seat](https://img.shields.io/badge/toilet_seat-left_up_(sorry)-lightgrey)
+![Tests](https://img.shields.io/badge/tests-0_passed,_0_failed,_1_flooded-orange)
+![Uptime](https://img.shields.io/badge/stream_uptime-until_empty-success)
 
 </div>
 
@@ -35,6 +40,12 @@
 > *"Why is the porcelain stain shader better than my company's entire frontend?"* — a concerned senior engineer
 
 > *"Mom said it's my turn on the toilet simulator."* — a kid in 2026
+
+> *"I asked for a physics engine and they gave me Newtonian urine. Still a physics engine. Technically."* — a game dev, staring into the void
+
+> *"Finally, a simulator where missing the bowl has consequences."* — the bathroom floor
+
+> *"The trajectory preview is the most useful thing I've seen this year and I hate that."* — someone who just learned what a parabola is
 
 ---
 
@@ -105,13 +116,52 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 Unlimited bladder. 1.8× pressure. Drains your body water until you **become the pee ball**. 💛
 It has eyes. It bounces. It's honestly the best character in the game.
 
+## 📊 Benchmarks (very scientific)
+
+| Scenario | Result |
+|---|---|
+| Fresh bladder, aim -24° | Bullseye 🎯 |
+| 3 AM, half asleep | Hits the seat. Seat was up. Hits the floor anyway |
+| Overdrive in a small bathroom | Dissolved into a pee ball in 35 s |
+| Ate beets, forgot | Briefly called an ambulance |
+| Paris, café table | 3 wine bottles down, 0 regrets |
+| Tokyo, lanterns at power 1.0× | Physically impossible. Crank it to 1.6× |
+| Auto-target mode vs. 6 slimes | 45 knockdowns in 20 s, zero mercy |
+
+## ❓ FAQ
+
+**Why?**
+Because "why not" stopped being a question somewhere around the procedural toilet flush sound.
+
+**Is this educational?**
+The urine color chart is legit. The pee ball is not.
+
+**Can I pee on people?**
+No. We have slimes, Gloops, rubber ducks, cones, trash cans, a cab, a campfire and a snowman. Have some self-respect.
+
+**Does the toilet overflow if I don't flush?**
+Yes. Then the flood dissolves you. Flush your toilet. This is the one real life lesson in here.
+
+**Why is the sound so good?**
+Pink noise, band-pass filters, LFOs and per-surface impact voices, all spatialized with HRTF. Nobody stopped me.
+
+**Can I load my own character?**
+Yes. Drop in any rigged `.glb`. Mixamo rigs get the skeleton skin and stream placement for free.
+
+## 🐛 Known issues
+
+- Stream does not respect personal space
+- Pee ball has no known cure besides the Respawn button
+- Snowman files a complaint every 9 seconds, then rebuilds and forgives you
+- If you flip the character upside down and release, that's on you
+
 ## 🚀 Run it locally
 
 ES modules don't load from `file://`, so serve the folder with literally anything:
 
 ```bash
-git clone https://github.com/yesjermo/hydrosim-3d.git
-cd hydrosim-3d
+git clone https://github.com/yesjermo/urinal-physics.git
+cd urinal-physics
 python3 -m http.server 8765
 ```
 
