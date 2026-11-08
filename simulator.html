@@ -83,11 +83,14 @@
   .current-color i { width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(255,255,255,.3); }
   .filebtn { flex: 1; text-align: center; font: inherit; color: var(--text); background: #162033; border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; cursor: pointer; }
   .filebtn:hover { border-color: rgba(245,193,75,.4); }
-  .intake { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 6px; }
+  .intake { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 5px; margin-top: 6px; }
   .intake button { padding: 6px 2px; font-size: 10.5px; line-height: 1.15; display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .intake button em { font-style: normal; font-size: 18px; }
   .intake button small { color: var(--muted); font-size: 9.5px; }
   .intake button.refuse { opacity: 0.55; text-decoration: line-through; }
+  .intake button { height: 100%; justify-content: center; }
+  .intake button.pop { animation: pop .35s ease-out; }
+  @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(.9); background: var(--lime, #d7ff3a); } 100% { transform: scale(1); } }
   .intake-log { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; min-height: 22px; }
   .intake-log span { font-size: 10.5px; background: #0d1422; border: 1px solid var(--line); border-radius: 999px; padding: 2px 7px; color: #b9c5d8; }
 
@@ -564,16 +567,18 @@ const DOG_INTAKE = [
   { id: 'grapes',   icon: '🍇', label: 'Grapes',           ml: 0, refuse: 'Grapes can poison dogs. Refused.' },
 ];
 const STATUE_INTAKE = [
-  { id: 'mains',    icon: '🚰', label: 'Mains water',      ml: 1000 },
-  { id: 'rain',     icon: '🌧️', label: 'Rain shower',      ml: 500 },
-  { id: 'coin',     icon: '🪙', label: 'Coin (make a wish)', ml: 0 },
-  { id: 'festbeer', icon: '🍺', label: 'Festival beer',    ml: 330, diuretic: 1.0 },
-  { id: 'kriek',    icon: '🍒', label: 'Cherry beer',      ml: 330, diuretic: 0.8, pig: { beet: 0.8 } },
-  { id: 'dyeblue',  icon: '🧪', label: 'Blue dye prank',   ml: 0,   pig: { green: 1.5 } },
-  { id: 'dyeorange',icon: '🟠', label: 'Orange dye (match day)', ml: 0, pig: { orange: 1.6 } },
-  { id: 'algae',    icon: '🦠', label: 'Algae bloom',      ml: 0,   pig: { brown: 1.0 } },
-  { id: 'pigeon',   icon: '🐦', label: 'Pigeon visit',     ml: 0 },
-  { id: 'frozen',   icon: '❄️', label: 'Frozen pipes',     ml: -300 },
+  { id: 'mains',    icon: '🚰', label: 'Mains water',   ml: 1000, tag: 'jets on',   say: 'Mains on: the basin jets fire up.' },
+  { id: 'rain',     icon: '🌧️', label: 'Rain shower',   ml: 500,  tag: 'rain',      say: 'A Brussels drizzle rolls in.' },
+  { id: 'coin',     icon: '🪙', label: 'Coin wish',     ml: 0,    tag: 'make a wish', say: 'Plink. Wish made. The coin joins the pile.' },
+  { id: 'festbeer', icon: '🍺', label: 'Festival beer', ml: 330,  diuretic: 1.0, tag: 'foamy', say: 'Festival day: the basin foams up amber.' },
+  { id: 'kriek',    icon: '🍒', label: 'Cherry beer',   ml: 330,  diuretic: 0.8, pig: { beet: 0.8 }, tag: 'pink', say: 'Cherry beer turns the basin red.' },
+  { id: 'dyeblue',  icon: '🧪', label: 'Blue dye',      ml: 0,    pig: { green: 1.5 }, tag: 'prank', say: 'Someone dyed the fountain blue.' },
+  { id: 'dyeorange',icon: '🟠', label: 'Orange dye',    ml: 0,    pig: { orange: 1.6 }, tag: 'match day', say: 'Match day! Everything goes orange.' },
+  { id: 'algae',    icon: '🦠', label: 'Algae bloom',   ml: 0,    pig: { brown: 1.0 }, tag: 'murky', say: 'Green specks drift on the water.' },
+  { id: 'bubbles',  icon: '🫧', label: 'Soap bubbles',  ml: 0,    tag: 'prank',     say: 'Washing-up liquid prank: bubbles everywhere.' },
+  { id: 'pigeon',   icon: '🐦', label: 'Pigeon visit',  ml: 0,    tag: 'cameo',     say: 'A pigeon lands on his head. Classic.' },
+  { id: 'frozen',   icon: '❄️', label: 'Frozen pipes',  ml: -300, tag: 'freezes',   say: 'Cold snap: the basin ices over.' },
+  { id: 'clean',    icon: '🧽', label: 'Cleaning day',  ml: 0,    tag: 'reset',     say: 'Scrubbed: dye, coins and algae cleared.' },
 ];
 function intakeMenu() { return state.figure === 'beagle' ? DOG_INTAKE : state.figure === 'statue' ? STATUE_INTAKE : INTAKE; }
 const ALL_INTAKE = [...INTAKE, ...DOG_INTAKE, ...STATUE_INTAKE];
@@ -1851,7 +1856,8 @@ function buildStatue(root) {
   const exit = add(new THREE.Object3D(), 0, 0.215, 0.105, fig);   // fountain spout just under the front of the smock hem
   let sBlink = 3;
   const tick = (dt, t) => {
-    pool.material.color.copy(_poolTint.set('#9fd3e6').lerp(urineColor, Math.min(0.6, sim.stainMl / 600)));
+    water.color.copy(_poolTint.set('#9fd3e6').lerp(urineColor, Math.min(0.6, sim.stainMl / 600)));
+    water.color.lerp(tint.color, tint.amt);                         // dyes / beer / algae from the fountain supply menu
     // Bronze face follows the same moods as everyone else (eyelids, brows, mouth shape)
     const ex = EXPRESSIONS[currentExpression()] || EXPRESSIONS.neutral, f = Math.min(1, dt * 8);
     sBlink -= dt; if (sBlink < -0.13) sBlink = 3 + Math.random() * 4;
@@ -1865,8 +1871,161 @@ function buildStatue(root) {
     head.rotation.z = Math.sin(t * 0.7) * 0.025;                 // the faintest bronze 'wobble' so it doesn't look frozen
     for (const a of arms) a.rotation.x = Math.sin(t * 0.9) * 0.02;
   };
+  /* ---- Fountain supply reactions: every menu item shows up on the fountain itself ---- */
+  // Shared droplet particles (rain, jets, splashes) with per-drop colour
+  const DROPS = 360, dPos = new Float32Array(DROPS * 3), dCol = new Float32Array(DROPS * 3), dVel = new Float32Array(DROPS * 3), dLife = new Float32Array(DROPS);
+  const dGeo = new THREE.BufferGeometry();
+  dGeo.setAttribute('position', new THREE.BufferAttribute(dPos, 3)); dGeo.setAttribute('color', new THREE.BufferAttribute(dCol, 3));
+  const drops = add(new THREE.Points(dGeo, new THREE.PointsMaterial({ size: 0.022, vertexColors: true, transparent: true, opacity: 0.85, depthWrite: false })), 0, 0, 0);
+  drops.frustumCulled = false;
+  let dNext = 0; const _dc = new THREE.Color();
+  const emit = (x, y, z, vx, vy, vz, life, color) => {
+    const i = dNext = (dNext + 1) % DROPS;
+    dPos.set([x, y, z], i * 3); dVel.set([vx, vy, vz], i * 3); dLife[i] = life; _dc.set(color); dCol.set([_dc.r, _dc.g, _dc.b], i * 3);
+  };
+  const POOL_Y = 0.17, POOL_R = 0.47;
+  const splashAt = (x, z, n, color) => { for (let k = 0; k < n; k++) { const a = Math.random() * 6.28, s = 0.3 + Math.random() * 0.6; emit(x, POOL_Y + 0.01, z, Math.cos(a) * s, 0.8 + Math.random() * 1.2, Math.sin(a) * s, 0.6, color); } };
+  // Basin tint (dyes, beer, algae) that slowly clears; foam; floating algae; ice; frost on the bronze
+  const tint = { color: new THREE.Color('#9fd3e6'), amt: 0 };
+  const foam = add(new THREE.Mesh(new THREE.CircleGeometry(POOL_R - 0.01, 40), new THREE.MeshStandardMaterial({ color: '#f6ead2', roughness: 0.9, transparent: true, opacity: 0 })), 0, POOL_Y + 0.004, 0);
+  foam.rotation.x = -Math.PI / 2;
+  const specks = Array.from({ length: 26 }, () => {
+    const m = add(new THREE.Mesh(new THREE.CircleGeometry(0.012 + Math.random() * 0.018, 8), new THREE.MeshStandardMaterial({ color: '#3f6b1e', roughness: 1 })), 0, POOL_Y + 0.006, 0);
+    m.rotation.x = -Math.PI / 2; m.visible = false; m.userData.a = Math.random() * 6.28; m.userData.r = 0.1 + Math.random() * 0.33; return m;
+  });
+  const iceMat = new THREE.MeshPhysicalMaterial({ color: '#e6f4ff', roughness: 0.35, clearcoat: 1, transparent: true, opacity: 0.95 });
+  const icicles = Array.from({ length: 10 }, (_, k) => {
+    const a = (k / 10) * Math.PI * 2, m = add(new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.06 + Math.random() * 0.06, 8), iceMat), Math.cos(a) * 0.19, 0.66, Math.sin(a) * 0.19 - 0.05);
+    m.rotation.x = Math.PI; m.visible = false; return m;
+  });
+  const bronzeBase = bronze.color.clone(), FROST = new THREE.Color('#cfe3ef');
+  let frozen = 0, rain = 0, jets = 0, bubblesT = 0, sparkle = 0, foamT = 0, algaeT = 0;
+  // Coins: arc in from the viewer's side, splash, then lie on the basin floor (they pile up)
+  const coinMat = new THREE.MeshStandardMaterial({ color: '#e7c35a', metalness: 1, roughness: 0.25 });
+  const coins = Array.from({ length: 24 }, () => { const m = add(new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.004, 18), coinMat), 0, 0, 0); m.visible = false; m.userData = { t: -1 }; return m; });
+  let coinNext = 0;
+  // Soap bubbles: iridescent spheres that rise, wobble and pop
+  const bubbleMat = new THREE.MeshPhysicalMaterial({ color: '#ffffff', roughness: 0, transmission: 1, thickness: 0.01, iridescence: 1, iridescenceIOR: 1.3, transparent: true, opacity: 0.55 });
+  const bubbles = Array.from({ length: 30 }, () => { const m = add(new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), bubbleMat), 0, 0, 0); m.visible = false; m.userData = { t: 0 }; return m; });
+  // A pigeon: flies in, lands on the statue's head, bobs, then flies off
+  const pigeon = (() => {
+    const g = add(new THREE.Group(), 0, 0, 0); g.visible = false;
+    const grey = new THREE.MeshStandardMaterial({ color: '#8d939c', roughness: 0.8 });
+    const neckMat = new THREE.MeshPhysicalMaterial({ color: '#4d6b62', roughness: 0.4, iridescence: 1, iridescenceIOR: 1.8 });
+    add(S(new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), grey)), 0, 0.04, 0, g).scale.set(1.5, 1, 1);
+    const neck = add(new THREE.Mesh(new THREE.SphereGeometry(0.028, 12, 10), neckMat), 0.05, 0.07, 0, g);
+    const ph = add(new THREE.Group(), 0.065, 0.1, 0, g);
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.024, 12, 10), grey), 0, 0, 0, ph);
+    add(new THREE.Mesh(new THREE.ConeGeometry(0.006, 0.02, 6), new THREE.MeshStandardMaterial({ color: '#2b2b2b' })), 0.028, -0.003, 0, ph).rotation.z = -Math.PI / 2;
+    for (const s of [-1, 1]) add(new THREE.Mesh(new THREE.SphereGeometry(0.005, 6, 6), new THREE.MeshBasicMaterial({ color: '#ff7a1a' })), 0.012, 0.008, s * 0.017, ph);
+    add(new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.06, 8), new THREE.MeshStandardMaterial({ color: '#4a4f57' })), -0.075, 0.04, 0, g).rotation.z = Math.PI / 2;
+    const wings = [-1, 1].map(s => { const w = add(new THREE.Group(), 0, 0.06, s * 0.035, g);
+      add(new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 8), grey), -0.01, 0, s * 0.03, w).scale.set(1.3, 0.25, 1); w.userData.s = s; return w; });
+    for (const s of [-1, 1]) add(new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.03, 6), new THREE.MeshStandardMaterial({ color: '#d9666a' })), 0, 0.0, s * 0.015, g);
+    return { g, ph, wings, neck, t: -1 };
+  })();
+  const HEAD_TOP = new THREE.Vector3(0, 1.575, -0.01), _pa = new THREE.Vector3(), _pb = new THREE.Vector3();
+  const PIGEON_FROM = new THREE.Vector3(-2.5, 2.6, 1.8), PIGEON_TO = new THREE.Vector3(2.8, 2.9, -1.5);
+
+  const react = id => {
+    const ping = type => { if (audio.started) audio.blip(type, 0.8); };
+    if (id === 'mains') { jets = 3; ping('water'); }
+    else if (id === 'rain') { rain = 6; }
+    else if (id === 'coin') {
+      const c = coins[coinNext = (coinNext + 1) % coins.length];
+      const a = Math.random() * 6.28, r = 0.08 + Math.random() * 0.3;
+      Object.assign(c.userData, { t: 0, from: new THREE.Vector3(0.9, 1.3, 1.4), to: new THREE.Vector3(Math.cos(a) * r, 0.11, Math.sin(a) * r), spin: Math.random() * 6 });
+      c.visible = true;
+    }
+    else if (id === 'festbeer') { tint.color.set('#e0a43a'); tint.amt = 0.85; foamT = 12; }
+    else if (id === 'kriek') { tint.color.set('#b0213a'); tint.amt = 0.85; foamT = 8; }
+    else if (id === 'dyeblue') { tint.color.set('#1f6bff'); tint.amt = 0.95; splashAt(0, 0, 30, '#1f6bff'); }
+    else if (id === 'dyeorange') { tint.color.set('#ff7a12'); tint.amt = 0.95; splashAt(0, 0, 30, '#ff7a12'); }
+    else if (id === 'algae') { tint.color.set('#4f7d24'); tint.amt = 0.8; algaeT = 25; }
+    else if (id === 'pigeon') { if (pigeon.t < 0) { pigeon.t = 0; pigeon.g.visible = true; } }
+    else if (id === 'frozen') { frozen = 12; ping('ceramic'); }
+    else if (id === 'bubbles') { bubblesT = 6; }
+    else if (id === 'clean') {
+      tint.amt = 0; foamT = 0; algaeT = 0; frozen = 0; sim.stainMl = 0;
+      for (const c of coins) { c.visible = false; c.userData.t = -1; }
+      sparkle = 2.5; clearIntake();
+    }
+  };
+  const pigeonUpdate = (dt, t) => {
+    if (pigeon.t < 0) return;
+    pigeon.t += dt;
+    const T_IN = 2.2, T_STAY = 8, T_OUT = 2.2, p = pigeon.t, g = pigeon.g;
+    const flap = Math.sin(t * 28) * 0.9;
+    if (p < T_IN) {                                                  // swoop in along a curve, slowing to land
+      const k = p / T_IN, e = 1 - Math.pow(1 - k, 2.4);
+      g.position.lerpVectors(PIGEON_FROM, HEAD_TOP, e); g.position.y += Math.sin(k * Math.PI) * 0.35;
+      g.rotation.y = Math.atan2(-(HEAD_TOP.z - PIGEON_FROM.z), HEAD_TOP.x - PIGEON_FROM.x);
+      for (const w of pigeon.wings) w.rotation.x = w.userData.s * flap;
+    } else if (p < T_IN + T_STAY) {                                  // perched: head bob, wings folded, a little turn
+      g.position.copy(HEAD_TOP);
+      for (const w of pigeon.wings) w.rotation.x = 0;
+      pigeon.ph.position.x = 0.065 + Math.max(0, Math.sin(t * 7)) * 0.012;
+      g.rotation.y += dt * 0.6 * Math.sin(t * 0.7);
+    } else if (p < T_IN + T_STAY + T_OUT) {                          // take off
+      const k = (p - T_IN - T_STAY) / T_OUT;
+      g.position.lerpVectors(HEAD_TOP, PIGEON_TO, k * k); g.rotation.y = Math.atan2(-(PIGEON_TO.z - HEAD_TOP.z), PIGEON_TO.x - HEAD_TOP.x);
+      for (const w of pigeon.wings) w.rotation.x = w.userData.s * flap;
+    } else { pigeon.t = -1; g.visible = false; }
+  };
+  const fxUpdate = (dt, t) => {
+    // Droplets
+    for (let i = 0; i < DROPS; i++) {
+      if (dLife[i] <= 0) { dPos[i * 3 + 1] = -10; continue; }
+      dLife[i] -= dt; dVel[i * 3 + 1] -= 9.8 * dt;
+      for (let a = 0; a < 3; a++) dPos[i * 3 + a] += dVel[i * 3 + a] * dt;
+      const x = dPos[i * 3], z = dPos[i * 3 + 2];
+      if (dPos[i * 3 + 1] < POOL_Y && Math.hypot(x, z) < POOL_R) { dLife[i] = 0; if (Math.random() < 0.15) emit(x, POOL_Y, z, 0, 0.4, 0, 0.12, '#dff4ff'); }
+      else if (dPos[i * 3 + 1] < 0) dLife[i] = 0;
+    }
+    dGeo.attributes.position.needsUpdate = dGeo.attributes.color.needsUpdate = true;
+    if (rain > 0) { rain -= dt; for (let k = 0; k < 6; k++) { const a = Math.random() * 6.28, r = Math.random() * 0.9; emit(Math.cos(a) * r, 2.4, Math.sin(a) * r, 0, -4, 0, 1.2, '#bfe3ff'); } }
+    if (jets > 0) {                                                   // ring of arcing jets from the basin rim into the middle
+      jets -= dt;
+      for (let k = 0; k < 8; k++) { const a = (k / 8) * 6.28 + t * 0.4; emit(Math.cos(a) * 0.48, 0.24, Math.sin(a) * 0.48, -Math.cos(a) * 0.55, 1.5, -Math.sin(a) * 0.55, 1, '#d6f0ff'); }
+    }
+    if (sparkle > 0) { sparkle -= dt; for (let k = 0; k < 3; k++) { const a = Math.random() * 6.28; emit(Math.cos(a) * 0.3, 0.3 + Math.random() * 1.2, Math.sin(a) * 0.3, 0, 0.3, 0, 0.5, '#fff6c2'); } }
+    // Coins in flight / resting
+    for (const c of coins) {
+      const u = c.userData; if (u.t < 0) continue;
+      if (u.t < 1) {
+        u.t = Math.min(1, u.t + dt / 0.85);
+        c.position.lerpVectors(u.from, u.to, u.t); c.position.y += Math.sin(u.t * Math.PI) * 0.45;
+        c.rotation.set(u.t * 14 + u.spin, 0, u.t * 9);
+        if (u.t >= 1) { splashAt(u.to.x, u.to.z, 14, '#e8f6ff'); c.rotation.set(0, u.spin, 0); if (audio.started) audio.blip('water', 0.7); }
+      }
+    }
+    // Bubbles
+    if (bubblesT > 0) {
+      bubblesT -= dt;
+      if (Math.random() < 0.5) { const b = bubbles.find(m => !m.visible); if (b) { const a = Math.random() * 6.28, r = Math.random() * 0.35;
+        b.position.set(Math.cos(a) * r, POOL_Y + 0.02, Math.sin(a) * r); b.userData.t = 0; b.userData.s = 0.015 + Math.random() * 0.03; b.visible = true; } }
+    }
+    for (const b of bubbles) {
+      if (!b.visible) continue;
+      const u = b.userData; u.t += dt;
+      b.position.y += dt * 0.35; b.position.x += Math.sin(u.t * 3 + u.s * 100) * dt * 0.08;
+      b.scale.setScalar(u.s * Math.min(1, u.t * 3));
+      if (u.t > 3.5 + u.s * 40) { b.visible = false; emit(b.position.x, b.position.y, b.position.z, 0, 0.2, 0, 0.2, '#ffffff'); }
+    }
+    // Foam, algae specks, ice, frost
+    foamT = Math.max(0, foamT - dt); foam.material.opacity = Math.min(0.85, foamT * 0.2); foam.visible = foamT > 0;
+    algaeT = Math.max(0, algaeT - dt);
+    for (const m of specks) { m.visible = algaeT > 0; m.userData.a += dt * 0.15; m.position.set(Math.cos(m.userData.a) * m.userData.r, POOL_Y + 0.006, Math.sin(m.userData.a) * m.userData.r); }
+    frozen = Math.max(0, frozen - dt);
+    const ice = Math.min(1, frozen / 2);                             // thaws over the last 2 s
+    pool.material = ice > 0.5 ? iceMat : water;
+    for (const c of icicles) { c.visible = ice > 0; c.scale.y = ice; }
+    bronze.color.copy(bronzeBase).lerp(FROST, ice * 0.7); bronze.roughness = 0.34 + ice * 0.4;
+    tint.amt = Math.max(0, tint.amt - dt * 0.02);                    // dyes and beer slowly dilute out
+    pigeonUpdate(dt, t);
+  };
   const belly = add(new THREE.Object3D(), 0, 0.29, 0.03, fig);
-  return procRig('statue', wrap, 1.55, exit, tick, { noFlip: true, belly });   // a fountain turns on its base but never flips over
+  return procRig('statue', wrap, 1.55, exit, (dt, t) => { tick(dt, t); fxUpdate(dt, t); }, { noFlip: true, belly, react });   // a fountain turns on its base but never flips over
 }
 const _poolTint = new THREE.Color();
 const PROC_FIGURES = { beagle: buildBeagle, statue: buildStatue };
@@ -2624,7 +2783,12 @@ function targetColor(out) {
 
 function consume(item) {
   if (!item) return;
-  if (item.refuse) { const n = document.getElementById('intakeNote'); n.textContent = '🚫 ' + item.refuse; clearTimeout(n._t); n._t = setTimeout(() => { n.textContent = ''; }, 4000); return; }
+  const say = (text, bad) => { const n = document.getElementById('intakeNote'); n.textContent = text; n.style.color = bad ? '#c0392b' : 'var(--muted)';
+    clearTimeout(n._t); n._t = setTimeout(() => { n.textContent = ''; }, 4000); };
+  if (item.refuse) { say('🚫 ' + item.refuse, true); return; }
+  if (item.say) say(item.icon + ' ' + item.say);
+  body.rig?.react?.(item.id);
+  if (item.id === 'clean') return;                                // cleaning resets, it isn't an intake
   state.hydration = THREE.MathUtils.clamp(state.hydration + item.ml / 2200, 0, 1);
   if (item.ml > 0) state.bodyWater = Math.min(1, state.bodyWater + item.ml / 4000);
   sim.diuretic += item.diuretic || 0;
@@ -3004,11 +3168,11 @@ function renderIntakeMenu() {
   $('intake').innerHTML = '';
   for (const it of intakeMenu()) {
     const b = document.createElement('button');
-    const tag = it.refuse ? 'not for dogs' : it.ml > 0 ? '+' + it.ml + ' mL' : it.ml < 0 ? 'dehydrating' : it.pig ? 'pigment' : 'just for fun';
+    const tag = it.refuse ? 'not for dogs' : it.tag || (it.ml > 0 ? '+' + it.ml + ' mL' : it.ml < 0 ? 'dehydrating' : it.pig ? 'pigment' : 'just for fun');
     b.innerHTML = `<em>${it.icon}</em>${it.label}<small>${tag}</small>`;
     if (it.refuse) b.classList.add('refuse');
     b.title = it.refuse || (it.pig ? Object.keys(it.pig).map(k => PIGMENTS[k].note).join(' ') : `${it.ml} mL of fluid`);
-    b.onclick = () => consume(it);
+    b.onclick = () => { consume(it); b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); };
     $('intake').appendChild(b);
   }
 }
