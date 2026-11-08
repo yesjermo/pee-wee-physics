@@ -319,11 +319,21 @@
       <button data-view="cross">X-Sect</button><button data-view="wide">Wide</button>
     </div>
     <div class="btns"><button id="btnLabels">Labels</button><button id="btnTurntable">Turntable</button><button id="btnStudio">Studio AO</button></div>
+    <div class="row"><label>Render quality</label><select data-key="quality">
+      <option value="low">Fast (no post-processing)</option><option value="high">High (MSAA, bloom, lens vignette)</option>
+      <option value="ultra">Ultra (+ ambient occlusion)</option></select></div>
   </section>
   <section>
     <h2>Character</h2>
     <div class="row"><label>Figure</label><select data-key="figure" id="figureSel">
       <option value="male">Nude man (default, censored)</option><option value="female">Female (sitting on the toilet)</option></select></div>
+    <div class="row"><label>Skin (standing figure)</label><select data-key="skinStyle" id="skinSel">
+      <option value="skeleton">💀 X-ray skeleton (default)</option><option value="glass">🧊 Glass body, bones inside</option>
+      <option value="chrome">🪩 Liquid chrome</option><option value="gold">🏆 Gold statue</option>
+      <option value="marble">🏛️ Marble statue</option><option value="clay">🏺 Terracotta clay</option>
+      <option value="toon">🎨 Cel-shaded toon</option><option value="hologram">🛰️ Hologram wireframe</option>
+      <option value="neon">⚡ Neon glow</option><option value="jelly">🟢 Slime jelly</option>
+      <option value="lava">🌋 Molten lava</option></select></div>
     <div class="row"><label>Pose (standing figure)</label><select data-key="pose">
       <option value="idle">Relaxed idle</option><option value="sad_pose">Sad slump</option><option value="sneak_pose">Sneaky crouch</option>
       <option value="agree">Nodding</option><option value="headShake">Head shake</option><option value="walk">Walk in place</option>
@@ -460,6 +470,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 /* =====================================================================
    1. CONFIG & STATE
@@ -541,7 +553,7 @@ const SCENARIOS = {
 };
 
 const state = {
-  labels: true, figure: 'male', skinStyle: 'skeleton', pose: 'idle', expression: 'auto', studio: false,
+  labels: true, figure: 'male', skinStyle: 'skeleton', quality: /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'low' : 'high', pose: 'idle', expression: 'auto', studio: false,
   scenario: 'bathroom', yaw: 0, flip: 0, roll: 0, spin: false, spinAxis: 'yaw', spinSpeed: 0.7, autoAim: false, autoFire: false,
   weight: 0.45, waist: 0.45, belly: 0.3, skin: 1,
   hydration: 0.6, fill: 0.55, aim: -0.42, bodyWater: 1,
@@ -560,7 +572,7 @@ const score = { hits: 0, down: 0 };
    ===================================================================== */
 const container = document.getElementById('viewport');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 1.5 : 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -1440,8 +1452,64 @@ const _glow = new THREE.Color(), GLOW_CALM = new THREE.Color('#4fd6e8'), GLOW_WA
 const _hip = new THREE.Vector3(), _pq = new THREE.Quaternion(), _pe = new THREE.Euler();
 
 /* ---- Skins / costumes ---- */
+/* Skins for the standing rig. All original material looks; `bones: true` shows the 3D skeleton through the body. */
+const toonRamp = (() => {
+  const t = new THREE.DataTexture(new Uint8Array([70, 70, 70, 255, 160, 160, 160, 255, 255, 255, 255, 255]), 3, 1);
+  t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t;
+})();
+const marbleTex = (() => {          // procedural veined marble (no image files)
+  const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
+  g.fillStyle = '#f3f0ea'; g.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 26; i++) {
+    g.strokeStyle = `rgba(${90 + Math.random() * 40},${90 + Math.random() * 40},${100 + Math.random() * 40},${0.08 + Math.random() * 0.18})`;
+    g.lineWidth = 0.6 + Math.random() * 2.4; g.beginPath();
+    let x = Math.random() * 512, y = 0; g.moveTo(x, y);
+    while (y < 512) { x += (Math.random() - 0.5) * 38; y += 10 + Math.random() * 18; g.lineTo(x, y); }
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 2); return t;
+})();
+/** Fresnel rim glow (+ optional scanlines) patched into a standard material: emissive only shows at the silhouette edges. */
+function rimGlow(mat, { power = 2.5, boost = 3, base = 0.05, scan = 0 } = {}) {
+  mat.onBeforeCompile = sh => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      float rim = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), ${power.toFixed(2)});
+      float scanl = ${scan.toFixed(2)} > 0.0 ? 0.65 + 0.35 * step(0.5, fract(gl_FragCoord.y * 0.25)) : 1.0;
+      totalEmissiveRadiance *= (${base.toFixed(3)} + rim * ${boost.toFixed(2)}) * scanl;`);
+  };
+  mat.customProgramCacheKey = () => 'rim' + power + boost + base + scan;
+  return mat;
+}
+const lavaTex = (() => {            // glowing cracks for the molten skin (emissive map)
+  const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, 512, 512); g.lineCap = 'round';
+  for (let i = 0; i < 60; i++) {
+    let x = Math.random() * 512, y = Math.random() * 512; const w = 1 + Math.random() * 5;
+    g.strokeStyle = `rgb(255,${120 + Math.random() * 110},${20 + Math.random() * 40})`; g.lineWidth = w; g.shadowColor = '#ff6a00'; g.shadowBlur = 12;
+    g.beginPath(); g.moveTo(x, y);
+    for (let k = 0; k < 6; k++) { x += (Math.random() - 0.5) * 90; y += (Math.random() - 0.5) * 90; g.lineTo(x, y); }
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 2); return t;
+})();
 const SKIN_MATS = {
   skeleton: new THREE.MeshPhysicalMaterial({ color: '#9fd3ff', transparent: true, opacity: 0.1, roughness: 0.1, depthWrite: false, side: THREE.DoubleSide }),
+  glass:    rimGlow(new THREE.MeshPhysicalMaterial({ color: '#cfeaff', roughness: 0.12, transmission: 0.92, thickness: 0.6, ior: 1.5, iridescence: 0.6, iridescenceIOR: 1.6,
+              clearcoat: 1, attenuationColor: new THREE.Color('#7fc4ff'), attenuationDistance: 0.6, emissive: '#bfe6ff', transparent: true, opacity: 0.95 }), { power: 3, boost: 0.6, base: 0 }),
+  chrome:   new THREE.MeshPhysicalMaterial({ color: '#eef2f6', metalness: 1, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.03 }),
+  gold:     new THREE.MeshPhysicalMaterial({ color: '#ffc94a', metalness: 1, roughness: 0.22, clearcoat: 0.4 }),
+  marble:   new THREE.MeshPhysicalMaterial({ map: marbleTex, roughness: 0.28, clearcoat: 0.7, clearcoatRoughness: 0.15, sheen: 0.3 }),
+  clay:     new THREE.MeshStandardMaterial({ color: '#c46f45', roughness: 0.95 }),
+  toon:     new THREE.MeshToonMaterial({ color: '#4fd6e8', gradientMap: toonRamp }),
+  hologram: rimGlow(new THREE.MeshStandardMaterial({ color: '#000000', roughness: 1, envMapIntensity: 0, emissive: '#3cf2ff', transparent: true, opacity: 0.85,
+              blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }), { power: 2, boost: 2.2, base: 0.06, scan: 1 }),
+  neon:     rimGlow(new THREE.MeshStandardMaterial({ color: '#0b0b12', roughness: 0.3, metalness: 0.4, emissive: '#d7ff3a', emissiveIntensity: 1 }), { power: 2.2, boost: 3.5, base: 0.02 }),
+  jelly:    new THREE.MeshPhysicalMaterial({ color: '#5cff7a', roughness: 0.12, transmission: 0.85, thickness: 0.5, ior: 1.3, clearcoat: 1, attenuationColor: new THREE.Color('#1f9a3a'), attenuationDistance: 0.4, transparent: true, opacity: 0.92 }),
+  lava:     new THREE.MeshStandardMaterial({ color: '#231310', roughness: 0.9, emissive: '#ffffff', emissiveMap: lavaTex, emissiveIntensity: 1.6 }),
+};
+const SKIN_LOOKS = {
+  skeleton: { bones: true }, glass: { bones: true }, jelly: { bones: true }, hologram: { bones: true },
+  chrome: {}, gold: {}, marble: {}, clay: {}, toon: {}, neon: {}, lava: {},
 };
 const EXPRESSIONS = {
   neutral:     { lid: 0.25, brow: 0,     browY: 0,      mouth: 'line' },
@@ -1685,6 +1753,9 @@ class HumanFigure {
     this.bladderMat.opacity = 0.25 + 0.35 * urge;
     this.ureterMat.emissiveIntensity = 0.15 + 0.25 * (0.5 + 0.5 * Math.sin(t * 3));
     this.urethraMat.emissiveIntensity = 0.25 + 1.2 * sim.env;
+    SKIN_MATS.lava.emissiveIntensity = 1.5 + 0.6 * Math.sin(t * 1.7) + 0.3 * Math.sin(t * 4.3);
+    SKIN_MATS.neon.emissiveIntensity = 0.9 + 0.2 * Math.sin(t * 3) + sim.env * 0.5;
+    SKIN_MATS.hologram.opacity = 0.75 + 0.1 * Math.sin(t * 9) + (Math.random() < 0.02 ? -0.4 : 0);
 
     const hip = this.hipLocal(_hip);
     const oz = (this.model ? 0.1 : 0.08) * wf * (0.92 + 0.14 * wa) + 0.012;
@@ -1792,11 +1863,13 @@ class HumanFigure {
 
   applySkin() {
     const rig = this.rig; if (!rig) return;
-    const skeleton = rig.key !== 'female';              // every male version is the skeleton; the seated female keeps her own textures
+    const own = rig.key === 'female';                  // the seated female keeps her own textures
+    const name = SKIN_LOOKS[state.skinStyle] ? state.skinStyle : 'skeleton', mat = SKIN_MATS[name];
+    const skeleton = !own && SKIN_LOOKS[name].bones;
     this.lookSkeleton = skeleton;
-    for (const { mesh, orig } of rig.meshes) mesh.material = skeleton ? SKIN_MATS.skeleton : orig;
+    for (const { mesh, orig } of rig.meshes) mesh.material = own ? orig : mat;
     for (const p of rig.skel) p.visible = skeleton;
-    this.bellyM.material = SKIN_MATS.skeleton;
+    this.bellyM.material = mat;
     skeletonViz.set(skeleton ? rig : null);
     this.face.visible = false;                         // the procedural face is only for the fallback mannequin
   }
@@ -1850,7 +1923,7 @@ class HumanFigure {
 }
 const body = new HumanFigure();
 scene.add(body.pivot);
-window.hydrosim = { camera, drips, body, state, sim, THREE, SIT, targets, score, toilet, get trainer() { return trainer; } };   // handy for debugging in the console
+window.hydrosim = { get pp() { return pp; }, camera, drips, body, state, sim, THREE, SIT, targets, score, toilet, get trainer() { return trainer; } };   // handy for debugging in the console
 body.rigs = {};
 const FIGURE_URLS = { male: HUMAN_MODEL_URLS, female: FEMALE_MODEL_URLS };
 body.loadRig(state.figure, FIGURE_URLS[state.figure], 0, rig => {
@@ -2583,6 +2656,7 @@ function setValue(key, value) {
   if (key === 'autoFire' && value) state.autoAim = true;
   if ((key === 'autoAim' || key === 'autoFire') && value) { state.spin = false; sim.yawVel = sim.pitchVel = 0; }
   if (key === 'figure') applyFigure(value);
+  if (key === 'skinStyle') body.applySkin();
 
   if (key === 'pose') body.applyPose();
   if (key === 'scenario' && value !== 'bathroom' && body.sitting) { state.figure = 'male'; applyFigure('male'); }
@@ -2785,17 +2859,57 @@ function drawViz() {
 /* =====================================================================
    10. MAIN LOOP
    ===================================================================== */
-let composer = null;
-function studioComposer() {
+/* Post-processing chain (three.js addons): HDR + 4x MSAA render target -> GTAO (ultra / studio) -> selective-looking
+   bloom (only HDR highlights: fire, neon, lava skin, emissive props) -> lens vignette + film grain -> tone map / sRGB. */
+const LensShader = {
+  uniforms: { tDiffuse: { value: null }, uVignette: { value: 0.32 }, uGrain: { value: 0.035 }, uTime: { value: 0 }, uAberration: { value: 0.0015 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uVignette, uGrain, uTime, uAberration; varying vec2 vUv;
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    void main(){
+      vec2 d = vUv - 0.5; float r2 = dot(d, d);
+      vec2 off = d * uAberration * r2 * 4.0;                       // chromatic aberration grows toward the edges
+      vec4 c = texture2D(tDiffuse, vUv);
+      c.r = texture2D(tDiffuse, vUv + off).r; c.b = texture2D(tDiffuse, vUv - off).b;
+      c.rgb *= mix(1.0, smoothstep(0.75, 0.05, r2 * 1.6), uVignette);
+      c.rgb += (hash(vUv * 1000.0 + uTime) - 0.5) * uGrain * (0.3 + c.rgb);
+      gl_FragColor = c;
+    }`,
+};
+const BLOOM_BY_SCENE = { tokyo: 0.6, campfire: 0.55, aim: 0.45, nyc: 0.4, paris: 0.35 };
+let composer = null, pp = null;
+function getComposer() {
   if (composer) return composer;
-  composer = new EffectComposer(renderer);
+  const pr = renderer.getPixelRatio();
+  const rt = new THREE.WebGLRenderTarget(innerWidth * pr, innerHeight * pr, { type: THREE.HalfFloatType, samples: 4 });
+  composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera));
   const ao = new GTAOPass(scene, camera, innerWidth, innerHeight);
   ao.updateGtaoMaterial({ radius: 0.25, distanceFallOff: 1, thickness: 1, scale: 1.2 });
   composer.addPass(ao);
+  // Clamp HDR first: mirror-like skins under point lights produce specular spikes in the thousands that would flood the bloom
+  composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null } },
+    vertexShader: LensShader.vertexShader,
+    fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); gl_FragColor = vec4(clamp(c.rgb, 0.0, 1.6), c.a); }' }));
+  const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.3, 0.25, 0.9);   // only bright light sources / emissives glow
+  composer.addPass(bloom);
+  const lens = new ShaderPass(LensShader);
+  composer.addPass(lens);
   composer.addPass(new OutputPass());
   composer.setSize(innerWidth, innerHeight);
+  pp = { ao, bloom, lens };
   return composer;
+}
+function renderFrame(t) {
+  const q = state.quality, ao = state.studio || q === 'ultra';
+  if (q === 'low' && !ao) { renderer.render(scene, camera); return; }
+  const c = getComposer();
+  pp.ao.enabled = ao;
+  pp.bloom.enabled = pp.lens.enabled = q !== 'low';
+  const skinGlow = ['neon', 'lava', 'hologram'].includes(state.skinStyle) && state.figure === 'male' ? 0.25 : 0;
+  pp.bloom.strength = (BLOOM_BY_SCENE[state.scenario] ?? 0.25) + skinGlow + (state.overdrive ? 0.25 : 0);
+  pp.lens.uniforms.uTime.value = t % 100;
+  c.render();
 }
 
 function resize() {
@@ -2866,7 +2980,7 @@ function frame() {
   controls.maxPolarAngle = state.view === 'top' ? Math.PI : Math.PI * 0.495;
   controls.update();
   skeletonViz.update();
-  if (state.studio) studioComposer().render(); else renderer.render(scene, camera);
+  renderFrame(t);
 
   uiTimer += dt;
   if (uiTimer > 0.08) {
@@ -3064,6 +3178,8 @@ function hudFrame(dt) {
 // URL options used by the front page: ?scene=<scenario>  ?autostart (start peeing, keep cycling)  ?view=<camera preset>
 const URLP = new URLSearchParams(location.search);
 if (SCENARIOS[URLP.get('scene')]) state.scenario = URLP.get('scene');
+if (SKIN_LOOKS[URLP.get('skin')]) state.skinStyle = URLP.get('skin');
+if (['low', 'high', 'ultra'].includes(URLP.get('quality'))) state.quality = URLP.get('quality');
 if (URLP.has('autostart')) { state.fill = 1; state.auto = true; state.flowing = true; }
 resetTargets();
 applyScenario(state.scenario);
