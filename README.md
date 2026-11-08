@@ -1,12 +1,16 @@
 <div align="center">
 
+<a href="https://yesjermo.github.io/urinal-physics/?splash"><img src="assets/splash.svg" alt="urinal-physics splash: click to enter" width="100%"></a>
+
+<sub>▲ click the board to enter: the splash plays, then the simulator</sub>
+
 # 💛 urinal-physics 💛
 ### HydroSim 3D: the world's most over-engineered pee simulator
 
 *Real-time bladder physics. Procedural pee acoustics. Spatial audio. Nobody asked for this.*
 
-[![Play it now](https://img.shields.io/badge/▶_PLAY-in_your_browser-f5c14b?style=for-the-badge)](https://yesjermo.github.io/urinal-physics/)
-[![Simulator](https://img.shields.io/badge/skip_the_landing_page-straight_to_the_toilet-4fd6e8?style=for-the-badge)](https://yesjermo.github.io/urinal-physics/simulator.html)
+[![Play it now](https://img.shields.io/badge/▶_PLAY-splash_→_simulator-f5c14b?style=for-the-badge)](https://yesjermo.github.io/urinal-physics/?splash)
+[![Simulator](https://img.shields.io/badge/skip_the_intro-straight_to_the_toilet-4fd6e8?style=for-the-badge)](https://yesjermo.github.io/urinal-physics/simulator.html)
 
 ![Three.js](https://img.shields.io/badge/three.js-r160-000000?logo=threedotjs&logoColor=white)
 ![Web Audio API](https://img.shields.io/badge/Web_Audio-100%25_synthesized-4fd6e8)
@@ -165,7 +169,7 @@ cd urinal-physics
 python3 -m http.server 8765
 ```
 
-Then open <http://localhost:8765> (landing page) or <http://localhost:8765/simulator.html> (straight to business).
+Then open <http://localhost:8765> (splash, then the simulator) or <http://localhost:8765/simulator.html> (straight to business).
 
 ## 🎮 Controls
 
@@ -181,7 +185,7 @@ Then open <http://localhost:8765> (landing page) or <http://localhost:8765/simul
 ## 📁 What's in the box
 
 ```
-index.html         landing page (Tailwind) that drives the sim over postMessage
+index.html         front page: black & white message-board splash, then the full simulator
 simulator.html     the entire simulator: one file, ~2000 lines, zero build step
 GAME_ROADMAP.md    plans to turn this into an actual game (god help us)
 ```
