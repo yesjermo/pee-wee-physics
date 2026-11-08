@@ -125,6 +125,7 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 - 🗽 **New York street:** brick walk-ups with fire escapes, a parked yellow cab, hydrant, trash cans
 - 🏮 **Tokyo neon alley:** neon signs, a glowing vending machine, paper lanterns (crank the power to reach them)
 - 🥐 **Paris boulevard:** Haussmann façades, café table with wine bottles, wicker chairs, a distant iron tower
+- 📟 **Y2K Japanese room:** a pastel bedroom diorama on tatami: star-and-heart wallpaper, a night-skyline window, fairy lights, a kotatsu, a beaded curtain, a candy-coloured translucent computer and a CRT with a pixel game. Knock over the lava lamp, inflatable chair, mochi-bunny plush, flip phone, pet-egg toy, CD tower, comic stack and pager. All original designs.
 - 🎯 **Auto-target mode** aims *and* fires by itself: it judges reach at full pressure, **leads moving targets**, turns the stream power up when nothing is in reach, prefers targets you're already facing, and aims into the bowl in the bathroom. Turning it on also stops any spin and stands you back upright, so it works even after you've been twirling.
 - 🎯 **Aim trainer:** a training room with glowing orbs and 60 s rounds. **Move the mouse to aim, hold the button to pee.** Shows a live time / pops / accuracy / avg time-to-kill bar, a landing reticle, and saves your best score.
 - 🎯 **Auto-aim** solves the ballistic equation for you:
@@ -156,7 +157,7 @@ Because "why not" stopped being a question somewhere around the procedural toile
 The urine color chart is legit. The pee ball is not.
 
 **Can I pee on people?**
-No. We have a beagle, a fountain statue, Drips, slimes, Gloops, rubber ducks, cones, trash cans, a cab, a campfire and a snowman. Have some self-respect.
+No. We have a Y2K bedroom full of clutter, a beagle, a fountain statue, Drips, slimes, Gloops, rubber ducks, cones, trash cans, a cab, a campfire and a snowman. Have some self-respect.
 
 **Does the toilet overflow if I don't flush?**
 Yes. Then the flood dissolves you. Flush your toilet. This is the one real life lesson in here.
