@@ -337,7 +337,8 @@
   <section>
     <h2>Character</h2>
     <div class="row"><label>Figure</label><select data-key="figure" id="figureSel">
-      <option value="male">Nude man (default, censored)</option><option value="female">Female (sitting on the toilet)</option></select></div>
+      <option value="male">Nude man (default, censored)</option><option value="female">Female (sitting on the toilet)</option>
+      <option value="beagle">🐶 Beagle (lifts a leg)</option><option value="statue">⛲ Brussels fountain statue (in costume)</option></select></div>
     <div class="row"><label>Skin (standing figure)</label><select data-key="skinStyle" id="skinSel">
       <option value="skeleton">💀 X-ray skeleton (default)</option><option value="glass">🧊 Glass body, bones inside</option>
       <option value="chrome">🪩 Liquid chrome</option><option value="gold">🏆 Gold statue</option>
@@ -1608,6 +1609,164 @@ const skeletonViz = (() => {
   };
 })();
 
+/* =====================================================================
+   Extra figures built from primitives: a beagle and a costumed bronze fountain statue.
+   They plug into the same "rig" slot as the glTF characters. Each one stands so its stream leaves along +Z
+   (so aiming / auto-aim work unchanged), exposes an `exit` point for the stream, and animates itself in `tick`.
+   ===================================================================== */
+function procRig(key, wrap, height, exit, tick) {
+  return { key, wrap, model: wrap, height, meshes: [], bones: {}, clips: [], mixer: new THREE.AnimationMixer(wrap), hips: null, head: null,
+    skel: [], hipY0: height * 0.53, proc: true, exit, tick };
+}
+const capsuleX = (r, len, mat) => { const m = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 8, 18), mat)); m.rotation.z = Math.PI / 2; return m; };
+
+/** Beagle: tricolour coat (white legs/chest/muzzle, tan head and ears, black saddle), floppy ears, wagging white-tipped tail.
+    Lifts the hind leg facing the target and lets go. */
+function buildBeagle(root) {
+  const wrap = new THREE.Group(); wrap.visible = false; root.add(wrap);
+  const dog = new THREE.Group(); wrap.add(dog);        // body along X with the head toward +X (faces the side camera); raised leg and stream toward +Z
+  const white = new THREE.MeshPhysicalMaterial({ color: '#f4efe6', roughness: 0.75, sheen: 1, sheenColor: new THREE.Color('#ffffff'), sheenRoughness: 0.6 });
+  const tan = new THREE.MeshPhysicalMaterial({ color: '#b8742e', roughness: 0.7, sheen: 1, sheenColor: new THREE.Color('#e6a35a'), sheenRoughness: 0.6 });
+  const black = new THREE.MeshPhysicalMaterial({ color: '#1d1714', roughness: 0.6, sheen: 1, sheenColor: new THREE.Color('#5a4a40'), sheenRoughness: 0.5 });
+  const dark = new THREE.MeshStandardMaterial({ color: '#130c08', roughness: 0.25 });
+  const add = (m, x, y, z, parent = dog) => { m.position.set(x, y, z); parent.add(m); return m; };
+
+  // Torso: white belly, black saddle on top, white chest
+  add(capsuleX(0.105, 0.3, white), 0, 0.34, 0);
+  const saddle = add(capsuleX(0.112, 0.27, black), -0.02, 0.37, 0); saddle.scale.set(1, 0.85, 1.02);
+  add(shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.105, 20, 16), white)), 0.17, 0.35, 0).scale.set(0.9, 1.05, 1);
+  add(shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.1, 20, 16), tan)), -0.17, 0.36, 0).scale.set(1, 0.95, 1);   // tan rump
+  // Neck + head
+  const neck = add(shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.1, 6, 14), tan)), 0.25, 0.45, 0); neck.rotation.z = -0.7;
+  const head = add(new THREE.Group(), 0.31, 0.54, 0);
+  add(shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.075, 24, 18), tan)), 0, 0, 0, head).scale.set(1.1, 0.95, 0.95);
+  const blaze = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.012, 0.06, 4, 8), white), 0.045, 0.035, 0, head); blaze.rotation.z = 1.1;
+  add(capsuleX(0.042, 0.06, white), 0.085, -0.025, 0, head);                                            // muzzle
+  add(new THREE.Mesh(new THREE.SphereGeometry(0.022, 14, 10), dark), 0.145, -0.012, 0, head).scale.set(0.9, 0.8, 1.1);   // nose
+  for (const s of [-1, 1]) {
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.014, 12, 10), dark), 0.06, 0.022, s * 0.042, head);
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.004, 8, 6), new THREE.MeshBasicMaterial({ color: '#fff' })), 0.07, 0.028, s * 0.048, head);
+  }
+  const tongue = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.012, 0.03, 4, 8), new THREE.MeshStandardMaterial({ color: '#e0646e', roughness: 0.4 })), 0.1, -0.06, 0, head);
+  tongue.rotation.z = 0.3; tongue.visible = false;
+  const ears = [-1, 1].map(s => {
+    const pivot = add(new THREE.Group(), -0.01, 0.03, s * 0.07, head);
+    const ear = add(shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.07, 6, 12), tan)), 0, -0.06, 0, pivot);
+    ear.scale.set(1, 1, 0.3); pivot.userData.side = s; return pivot;
+  });
+  // Legs: hip/shoulder pivots so they can bend and lift
+  const legs = [];
+  for (const [x, z, hind] of [[0.16, -0.06, 0], [0.16, 0.06, 0], [-0.16, -0.06, 1], [-0.16, 0.06, 1]]) {
+    const pivot = add(new THREE.Group(), x, 0.3, z);
+    add(shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.032, 0.18, 6, 12), white)), 0, -0.13, 0, pivot);
+    add(shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 10), white)), 0.012, -0.27, 0, pivot).scale.set(1.3, 0.6, 1);
+    if (hind) add(shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 12), tan)), 0, -0.02, 0, pivot).scale.set(1, 1.2, 0.8);   // thigh
+    legs.push({ pivot, hind, z });
+  }
+  // Tail: tan with a white tip, carried high
+  const tail = add(new THREE.Group(), -0.25, 0.42, 0);
+  const tb = add(shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.018, 0.12, 6, 10), tan)), 0, 0.07, 0, tail); tb.rotation.z = 0.35;
+  add(new THREE.Mesh(new THREE.SphereGeometry(0.02, 10, 8), white), -0.03, 0.15, 0, tail);
+
+  const raised = legs.find(l => l.hind && l.z > 0);          // the hind leg on the +Z side (toward the target)
+  const exit = add(new THREE.Object3D(), -0.13, 0.26, 0.07);   // under the raised leg
+  let lift = 0;
+  const tick = (dt, t) => {
+    const peeing = sim.env > 0.05 || state.flowing;
+    lift += ((peeing ? 1 : 0) - lift) * Math.min(1, dt * 5);
+    raised.pivot.rotation.x = -lift * 1.25;                   // swing the hind leg outward (+Z) and up
+    raised.pivot.rotation.z = -lift * 0.35;
+    dog.rotation.x = -lift * 0.12;                            // lean away from the raised leg
+    dog.position.y = lift * 0.015;
+    tail.rotation.x = Math.sin(t * (peeing ? 18 : 9)) * 0.45;
+    tail.rotation.z = 0.2 + lift * 0.3;
+    for (const e of ears) e.rotation.x = e.userData.side * (0.12 + Math.sin(t * 2.4 + e.userData.side) * 0.06);
+    head.rotation.z = Math.sin(t * 0.8) * 0.06 + (peeing ? 0.1 : 0);
+    head.rotation.x = Math.sin(t * 0.5) * 0.05;
+    tongue.visible = peeing || state.fill > 0.85;
+    const breathe = 1 + Math.sin(t * (state.fill > 0.85 ? 9 : 3)) * 0.015;
+    saddle.scale.y = 0.85 * breathe;
+  };
+  return Object.assign(procRig('beagle', wrap, 0.6, exit, tick), { viewScale: 0.5 });
+}
+
+/** A bronze fountain statue on a stone pedestal, dressed in one of the costumes the famous Brussels statue is known for
+    (red-and-gold tunic, cape and cap). Nothing anatomical is modelled: the water simply leaves a fountain spout at the hem. */
+function buildStatue(root) {
+  const wrap = new THREE.Group(); wrap.visible = false; root.add(wrap);
+  const stone = new THREE.MeshStandardMaterial({ color: '#a59d8f', roughness: 0.85 });
+  const stoneDark = new THREE.MeshStandardMaterial({ color: '#7d766b', roughness: 0.9 });
+  const bronze = new THREE.MeshPhysicalMaterial({ color: '#7a5a32', metalness: 1, roughness: 0.38, clearcoat: 0.3 });
+  const patina = new THREE.MeshPhysicalMaterial({ color: '#4f7a68', metalness: 0.6, roughness: 0.55 });
+  const red = new THREE.MeshPhysicalMaterial({ color: '#b3202a', roughness: 0.6, sheen: 1, sheenColor: new THREE.Color('#ff6b6b') });
+  const gold = new THREE.MeshStandardMaterial({ color: '#e0b648', metalness: 0.9, roughness: 0.3 });
+  const water = new THREE.MeshPhysicalMaterial({ color: '#9fd3e6', roughness: 0.05, transparent: true, opacity: 0.7, clearcoat: 1 });
+  const add = (m, x, y, z, parent = wrap) => { m.position.set(x, y, z); parent.add(m); return m; };
+  const S = g => shadowed(g);
+
+  // Fountain: basin with water, stepped pedestal, carved niche back
+  add(S(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 0.22, 40, 1, true), stone)), 0, 0.11, 0).material.side = THREE.DoubleSide;
+  add(S(new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.035, 10, 48), stone)), 0, 0.22, 0).rotation.x = Math.PI / 2;
+  const pool = add(new THREE.Mesh(new THREE.CircleGeometry(0.49, 40), water), 0, 0.17, 0); pool.rotation.x = -Math.PI / 2;
+  add(S(new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.5, 0.32), stone)), 0, 0.42, -0.05);
+  add(S(new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.06, 0.38), stoneDark)), 0, 0.2, -0.05);
+  add(S(new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.07, 0.4), stoneDark)), 0, 0.7, -0.05);
+  const niche = add(S(new THREE.Mesh(new THREE.BoxGeometry(0.62, 1.4, 0.12), stone)), 0, 1.13, -0.3);
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.04, 30, 1, false, 0, Math.PI), stoneDark), 0, 1.83, -0.24).rotation.x = Math.PI / 2;
+  niche.receiveShadow = true;
+
+  // The little bronze figure (about 60 cm), standing on the pedestal top
+  const fig = add(new THREE.Group(), 0, 0.735, 0); fig.scale.setScalar(1.35);   // a bit larger than life so it reads from the default camera
+  const legs = [-1, 1].map(s => {
+    const leg = add(S(new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.14, 6, 12), bronze)), s * 0.04, 0.12, 0, fig);
+    add(S(new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 10), bronze)), s * 0.04, 0.02, 0.02, fig).scale.set(1, 0.6, 1.5);
+    return leg;
+  });
+  // Costume: red tunic with gold trim covering torso and hips to mid-thigh, little cape, cap with a feather
+  const tunic = add(S(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.105, 0.22, 24), red)), 0, 0.3, 0, fig);
+  add(new THREE.Mesh(new THREE.TorusGeometry(0.104, 0.008, 6, 28), gold), 0, 0.19, 0, fig).rotation.x = Math.PI / 2;
+  add(new THREE.Mesh(new THREE.TorusGeometry(0.078, 0.007, 6, 28), gold), 0, 0.33, 0, fig).rotation.x = Math.PI / 2;   // belt
+  for (let i = 0; i < 4; i++) add(new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 6), gold), 0, 0.37 - i * 0.03, 0.078, fig);   // buttons
+  const cape = add(S(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 0.22, 24, 1, true, Math.PI * 0.6, Math.PI * 0.8), red)), 0, 0.3, -0.01, fig);
+  cape.material = red.clone(); cape.material.side = THREE.DoubleSide; cape.material.color.set('#7d1520');
+  // Arms: one hand on the hip, one at the hem
+  for (const s of [-1, 1]) {
+    add(S(new THREE.Mesh(new THREE.SphereGeometry(0.032, 14, 10), red)), s * 0.085, 0.395, 0, fig);          // puffed shoulder
+    const arm = add(S(new THREE.Mesh(new THREE.CapsuleGeometry(0.024, 0.1, 6, 10), red)), s * 0.122, 0.34, 0.01, fig);
+    arm.rotation.z = s < 0 ? -0.75 : 0.25;                                                                   // left hand on hip, right arm down
+    const hand = add(S(new THREE.Mesh(new THREE.SphereGeometry(0.024, 12, 10), bronze)), s < 0 ? -0.135 : 0.14, s < 0 ? 0.3 : 0.27, 0.02, fig);
+    hand.scale.set(1, 1.1, 0.9);
+  }
+  // Head: chubby cheeks, curls, cap
+  const head = add(new THREE.Group(), 0, 0.5, 0, fig);
+  add(S(new THREE.Mesh(new THREE.SphereGeometry(0.07, 24, 18), bronze)), 0, 0, 0, head);
+  for (const s of [-1, 1]) add(new THREE.Mesh(new THREE.SphereGeometry(0.028, 12, 10), bronze), s * 0.035, -0.02, 0.045, head);
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2, curl = add(new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), bronze), Math.cos(a) * 0.062, 0.035 + Math.sin(i * 1.7) * 0.01, Math.sin(a) * 0.062 - 0.01, head);
+    curl.scale.setScalar(0.8 + Math.random() * 0.4);
+  }
+  const cap = add(S(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.075, 0.04, 20), red)), 0, 0.07, -0.005, head); cap.rotation.x = -0.15;
+  add(new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.006, 6, 24), gold), 0, 0.05, -0.005, head).rotation.x = Math.PI / 2 - 0.15;
+  const feather = add(new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.09, 8), new THREE.MeshStandardMaterial({ color: '#f2efe6' })), 0.04, 0.11, -0.02, head);
+  feather.rotation.z = -0.5;
+  // Weathering: green patina streaks down the pedestal
+  for (let i = 0; i < 5; i++) {
+    const p = add(new THREE.Mesh(new THREE.PlaneGeometry(0.02 + Math.random() * 0.03, 0.2 + Math.random() * 0.2), patina), -0.12 + i * 0.06, 0.5, 0.111);
+    p.material = patina; p.renderOrder = 1;
+  }
+  legs.forEach(l => l.castShadow = true);
+
+  const exit = add(new THREE.Object3D(), 0, 0.2, 0.1, fig);   // fountain spout just under the tunic hem
+  const tick = (dt, t) => {
+    pool.material.color.copy(_poolTint.set('#9fd3e6').lerp(urineColor, Math.min(0.6, sim.stainMl / 600)));
+    feather.rotation.x = Math.sin(t * 3) * 0.08;
+    cape.rotation.y = Math.sin(t * 1.3) * 0.04;
+  };
+  return procRig('statue', wrap, 1.55, exit, tick);
+}
+const _poolTint = new THREE.Color();
+const PROC_FIGURES = { beagle: buildBeagle, statue: buildStatue };
+
 class HumanFigure {
   constructor() {
     this.pivot = new THREE.Group(); this.pivot.position.y = PIVOT_Y;
@@ -1769,14 +1928,16 @@ class HumanFigure {
     const oz = (this.model ? 0.1 : 0.08) * wf * (0.92 + 0.14 * wa) + 0.012;
     if (this.sitting) this.origin.position.set(hip.x, hip.y - 0.1, hip.z + 0.05);
     else this.origin.position.set(hip.x, hip.y - (this.model ? 0.13 : 0.11), hip.z + oz);
+    if (this.rig?.proc) { this.rig.wrap.updateMatrixWorld(true); this.root.worldToLocal(this.rig.exit.getWorldPosition(this.origin.position)); }
     this.organs.position.set(hip.x, hip.y - 0.97, hip.z);
     this.bellyM.position.set(hip.x, hip.y + 0.07, hip.z + 0.01);
     if (this.rig) {
-      const g = this.sitting ? 1 : (wf * (0.92 + 0.14 * wa)) / 1.12;
+      const g = this.sitting || this.rig.proc ? 1 : (wf * (0.92 + 0.14 * wa)) / 1.12;
       this.rig.wrap.scale.set(g, 1, g);
       this.rig.wrap.position.y = this.sitting ? SIT.hipY - this.rig.hipY0 : 0;
       if (!state.dissolved) this.mixer.update(dt);
       if (this.sitting) this.poseBones(SIT.bones);
+      if (this.rig.proc && !state.dissolved) this.rig.tick(dt, t);
     }
     this.updateFace(dt, t);
     if (Math.abs(wf - this._lastWeight) > 0.002) {
@@ -1803,9 +1964,9 @@ class HumanFigure {
     // Censor mosaic shimmer
     this._censorT += dt;
     if (this._censorT > 0.14) { this._censorT = 0; this.censorTex.repaint(); }
-    this.censor.visible = !this.sitting && (state.skin > 0.3 || state.view === 'cross');
+    this.censor.visible = !this.sitting && !this.rig?.proc && (state.skin > 0.3 || state.view === 'cross');
     // Organs only show when you can see inside (otherwise they can poke through the rig in some poses)
-    this.organs.visible = !this.rig || state.skin < 0.99 || this.lookSkeleton || state.view === 'cross';
+    this.organs.visible = !this.rig?.proc && (!this.rig || state.skin < 0.99 || this.lookSkeleton || state.view === 'cross');
   }
 
   setCrossSection(on) {
@@ -1828,6 +1989,7 @@ class HumanFigure {
 
   /** Load a rigged glTF character into a hidden "rig" slot (male / female / custom). */
   loadRig(key, urls, i = 0, onDone) {
+    if (PROC_FIGURES[key]) { const rig = PROC_FIGURES[key](this.root); this.rigs[key] = rig; onDone?.(rig); return; }
     if (i >= urls.length) { onDone?.(null); return; }
     new GLTFLoader().load(urls[i], gltf => {
       const model = gltf.scene;
@@ -1871,13 +2033,14 @@ class HumanFigure {
 
   applySkin() {
     const rig = this.rig; if (!rig) return;
-    const own = rig.key === 'female';                  // the seated female keeps her own textures
+    const own = rig.key === 'female' || !!rig.proc;    // the seated female, the beagle and the statue keep their own materials
     const name = SKIN_LOOKS[state.skinStyle] ? state.skinStyle : 'skeleton', mat = SKIN_MATS[name];
     const skeleton = !own && SKIN_LOOKS[name].bones;
     this.lookSkeleton = skeleton;
     for (const { mesh, orig } of rig.meshes) mesh.material = own ? orig : mat;
     for (const p of rig.skel) p.visible = skeleton;
     this.bellyM.material = mat;
+    if (rig.proc) this.bellyM.visible = false;
     skeletonViz.set(skeleton ? rig : null);
     this.face.visible = false;                         // the procedural face is only for the fallback mannequin
   }
@@ -2329,6 +2492,8 @@ function goView(name) {
   const v = VIEWS[name]; if (!v) return;
   state.view = name;
   let toP = new THREE.Vector3(...v.pos), toT = new THREE.Vector3(...v.target);
+  const k = body.rig?.viewScale ?? 1;                  // small figures (the beagle) get the close-up presets scaled down to their size
+  if (k !== 1 && ['side', 'macro', 'cross', 'field'].includes(name)) { toP.multiplyScalar(k); toT.multiplyScalar(k); }
   tween = { t: 0, fromP: camera.position.clone(), fromT: controls.target.clone(), toP, toT };
   body.setCrossSection(name === 'cross');
   document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === name));
@@ -2624,6 +2789,7 @@ function applyFigure(key) {
       state.yaw = Math.PI; state.flip = state.roll = 0; state.spin = false; state.autoAim = false;
     } else if (Math.abs(state.yaw) > 3) state.yaw = 0;
     $('modelNote').textContent = '';
+    goView(state.view);                                         // re-frame the camera for the new figure's size
     syncUI();
   };
   if (body.rigs[key]) return go();
