@@ -506,7 +506,8 @@ const state = {
   voided: 0, view: 'side',
 };
 const sim = { env: 0, pressure: 0, flow: 0, pdet: 0, speed: 0, dissolve: 0, diuretic: 0, flowTime: 0,
-  mlPerParticle: 0, flushing: 0, spillT: 0, submerged: 0, range: 0, stain: 0, yawVel: 0, pitchVel: 0 };
+  mlPerParticle: 0, flushing: 0, spillT: 0, submerged: 0, range: 0, stain: 0, stainMl: 0, yawVel: 0, pitchVel: 0 };
+const stainColor = new THREE.Color('#f0b84a');   // running mix of every pee colour deposited on the porcelain
 const score = { hits: 0, down: 0 };
 
 /* =====================================================================
@@ -671,6 +672,11 @@ const floodMat = new THREE.MeshPhysicalMaterial({ color: '#f0b84a', transparent:
 const flood = new THREE.Mesh(new THREE.CircleGeometry(1, 64), floodMat);
 flood.rotation.x = -Math.PI / 2; flood.position.set(0, 0.003, TOILET_Z); flood.scale.setScalar(0.0001);
 envGroups.bathroom.add(flood);
+// Stain ring at the water line inside the bowl (grows with the stain, takes the stain colour)
+const stainRingMat = new THREE.MeshStandardMaterial({ color: '#f0b84a', roughness: 0.6, transparent: true, opacity: 0, depthWrite: false });
+const stainRing = new THREE.Mesh(new THREE.TorusGeometry(1, 0.045, 10, 72), stainRingMat);
+stainRing.rotation.x = Math.PI / 2; stainRing.renderOrder = 1;
+toilet.group.add(stainRing);
 
 /* ---- Targets: anything the stream can hit ----
    shape 'cyl' = vertical cylinder (pos is base), 'sphere' = sphere (pos is centre). */
@@ -1629,7 +1635,7 @@ class HumanFigure {
 }
 const body = new HumanFigure();
 scene.add(body.pivot);
-window.hydrosim = { body, state, sim, THREE, SIT, targets, score };   // handy for debugging in the console
+window.hydrosim = { body, state, sim, THREE, SIT, targets, score, toilet };   // handy for debugging in the console
 body.rigs = {};
 const FIGURE_URLS = { male: HUMAN_MODEL_URLS, female: FEMALE_MODEL_URLS };
 body.loadRig(state.figure, FIGURE_URLS[state.figure], 0, rig => {
@@ -1777,7 +1783,12 @@ function onStreamHit(i, s) {
     puddleState.volume += 0.05;
     puddleState.center.lerp(_o.set(x, 0.002, z), 0.02);
   }
-  if (state.scenario === 'bathroom' && (s.bowl || s.type === 'ceramic')) sim.stain = Math.min(0.75, sim.stain + sim.mlPerParticle / 1500);
+  if (state.scenario === 'bathroom' && (s.bowl || s.type === 'ceramic')) {
+    const ml = sim.mlPerParticle;
+    stainColor.lerp(urineColor, ml / Math.max(ml, sim.stainMl + ml));   // weighted by how much of each colour landed
+    sim.stainMl = Math.min(800, sim.stainMl + ml);
+    sim.stain = Math.min(0.9, sim.stain + ml / 650);
+  }
   if (s.bowl) state.bowl += sim.mlPerParticle;          // each particle carries its share of the flow
   else if (s.flood) state.flood += sim.mlPerParticle;
   stream.life[i] = 0;
@@ -2085,9 +2096,15 @@ function updateBowl(dt) {
   toilet.water.scale.set(s, 1.2 * s, 1);
   toilet.waterMat.color.set('#cfeaf5').lerp(urineColor, Math.min(0.9, state.bowl / (state.bowl + 600)));
   // Porcelain takes on the pee colour: stains build up with use, flushing / mopping cleans them
-  toilet.ceramicIn.color.set('#eceff3').lerp(urineColor, sim.stain);
-  toilet.ceramic.color.set('#f4f6f8').lerp(urineColor, sim.stain * 0.55);
-  toilet.seatMat.color.set('#fbfbfb').lerp(urineColor, sim.stain * 0.35);
+  toilet.ceramicIn.color.set('#eceff3').lerp(stainColor, sim.stain);
+  toilet.ceramic.color.set('#f4f6f8').lerp(stainColor, sim.stain * 0.6);
+  toilet.seatMat.color.set('#fbfbfb').lerp(stainColor, sim.stain * 0.45);
+  toilet.ceramicIn.clearcoat = 1 - sim.stain * 0.7;                    // stained porcelain loses some of its gloss
+  stainRingMat.color.copy(stainColor).multiplyScalar(0.85);
+  stainRingMat.opacity = Math.min(0.9, sim.stain * 1.2);
+  stainRing.visible = sim.stain > 0.02 && toilet.water.visible;
+  const ry = toilet.water.position.y + 0.004, rr = 0.115 + (ry - 0.27) * 0.43;   // follow the water level along the inner wall
+  stainRing.position.y = ry; stainRing.scale.set(rr, rr * 1.2, rr);
   const fr = floodRadius();
   flood.scale.setScalar(Math.max(0.0001, fr)); floodMat.color.copy(urineColor);
   // Once the flood reaches the feet it starts dissolving the body
@@ -2352,7 +2369,7 @@ document.querySelectorAll('[data-key]').forEach(el => {
 $('btnFlow').onclick = () => setValue('flowing', !state.flowing);
 $('btnDrink').onclick = () => consume(INTAKE[0]);
 $('btnFlush').onclick = () => { sim.flushing = 1.6; sim.stain *= 0.35; audio.flush(); };
-$('btnMop').onclick = () => { state.flood = 0; puddleState.volume = 0; sim.stain = 0; };
+$('btnMop').onclick = () => { state.flood = 0; puddleState.volume = 0; sim.stain = 0; sim.stainMl = 0; };
 $('btnClearIntake').onclick = clearIntake;
 for (const it of INTAKE) {
   const b = document.createElement('button');
