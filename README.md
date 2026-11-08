@@ -96,7 +96,8 @@ Then feature creep happened. Now there's a slime target range and you can turn i
 
 ### 🧍 Characters
 - A rigged, animated human with a **pixel-mosaic censor** (we're classy here)
-- **Skins:** **cartoon guy** (default: cel-shaded with ink outlines, big expressive head, mitts & red sneakers) · anatomy sculpt (smooth, lean ZBrush-style grey matcap) · skin tone · clay · muscle anatomy · **skeleton** · gold statue · chrome · Gloop costume
+- **Figures:** **realistic man** (default: textured, rigged character with idle / walk / run) · mannequin man · female (sitting on the toilet) · or load your own `.glb`
+- **Skins:** realistic · **cartoon guy** (cel-shaded with ink outlines, big expressive head, mitts & red sneakers) · anatomy sculpt (smooth, lean ZBrush-style grey matcap) · skin tone · clay · muscle anatomy · **skeleton** · gold statue · chrome · Gloop costume
 - **Poses:** idle, sad slump, sneaky crouch, nodding, head shake, walk, run
 - **Facial expressions:** relieved, straining, embarrassed (with blush), surprised... with auto-blinking. **Auto mode** reacts to how full you are.
 - **Female figure** sitting on the toilet (clothed)

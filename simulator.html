@@ -279,9 +279,9 @@
   <section>
     <h2>Character</h2>
     <div class="row"><label>Figure</label><select data-key="figure" id="figureSel">
-      <option value="male">Male (standing)</option><option value="female">Female (sitting on the toilet)</option></select></div>
+      <option value="realman">Realistic man (default)</option><option value="male">Mannequin man (cartoon / sculpt looks)</option><option value="female">Female (sitting on the toilet)</option></select></div>
     <div class="row"><label>Skin / costume</label><select data-key="skinStyle">
-      <option value="cartoon">Cartoon guy (default)</option><option value="sculpt">Anatomy sculpt</option><option value="skin">Skin tone</option><option value="clay">Clay sculpt</option><option value="muscle">Muscle anatomy</option>
+      <option value="skin">Realistic (default)</option><option value="cartoon">Cartoon guy (mannequin)</option><option value="sculpt">Anatomy sculpt</option><option value="clay">Clay sculpt</option><option value="muscle">Muscle anatomy</option>
       <option value="skeleton">Skeleton</option><option value="gold">Gold statue</option><option value="chrome">Chrome</option>
       <option value="gloop">Gloop costume (purple)</option></select></div>
     <div class="row"><label>Pose (standing figure)</label><select data-key="pose">
@@ -447,6 +447,10 @@ const HUMAN_MODEL_URLS = [          // rigged, MIT-licensed three.js example cha
   'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/models/gltf/Xbot.glb',
   'https://threejs.org/examples/models/gltf/Xbot.glb',
 ];
+const REALMAN_MODEL_URLS = [        // realistic, textured, rigged man (three.js example character)
+  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/models/gltf/Soldier.glb',
+  'https://threejs.org/examples/models/gltf/Soldier.glb',
+];
 const FEMALE_MODEL_URLS = [
   'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/models/gltf/Michelle.glb',
   'https://threejs.org/examples/models/gltf/Michelle.glb',
@@ -503,7 +507,7 @@ const SCENARIOS = {
 };
 
 const state = {
-  labels: true, figure: 'male', skinStyle: 'cartoon', pose: 'idle', expression: 'auto', studio: false,
+  labels: true, figure: 'realman', skinStyle: 'skin', pose: 'idle', expression: 'auto', studio: false,
   scenario: 'bathroom', yaw: 0, flip: 0, roll: 0, spin: false, spinAxis: 'yaw', spinSpeed: 0.7, autoAim: false, autoFire: false,
   weight: 0.45, waist: 0.45, belly: 0.3, skin: 1,
   hydration: 0.6, fill: 0.55, aim: -0.42, bodyWater: 1,
@@ -1523,7 +1527,7 @@ class HumanFigure {
     for (const l of this.limbs) { l.scale.x = l.scale.z = lf; }
     const bz = 0.85 * (0.45 + 1.1 * state.belly + 0.25 * state.hydration + 0.15 * state.fill) * wf;
     this.bellyM.scale.set(0.95 * wa * wf, 0.9, bz);
-    if (this.rig) this.bellyM.visible = !this.sitting && bz > 0.95;   // on the rig, only show once the belly morph pushes past the torso
+    if (this.rig) this.bellyM.visible = this.rig.key === 'male' && bz > 0.95;   // on the rig, only show once the belly morph pushes past the torso
 
     const vol = 30 + state.fill * CAPACITY_ML;
     const r = Math.cbrt((3 * vol) / (4 * Math.PI)) / 100 * 1.15;
@@ -1621,6 +1625,7 @@ class HumanFigure {
       const height = key === 'female' ? 1.68 : 1.8, k = height / h;
       model.scale.multiplyScalar(k);
       model.position.set(-(box.min.x + box.max.x) / 2 * k, -box.min.y * k, -(box.min.z + box.max.z) / 2 * k);
+      if (key === 'realman') model.rotation.y = Math.PI;      // this model is authored facing -Z; the simulator expects +Z
       const wrap = new THREE.Group(); wrap.add(model); wrap.visible = false; this.root.add(wrap);
       const rig = { key, wrap, model, height, meshes: [], bones: {}, clips: gltf.animations, mixer: new THREE.AnimationMixer(model),
         hips: model.getObjectByName('mixamorigHips'), head: model.getObjectByName('mixamorigHead'), skel: [] };
@@ -1647,8 +1652,9 @@ class HumanFigure {
     this.rig = rig; this.model = rig.model; this.hips = rig.hips; this.mixer = rig.mixer;
     for (const o of this.procObjects) if (o !== this.bellyM && o !== this.face) o.visible = false;
     this.sitting = key === 'female';
-    this.bellyM.visible = !this.sitting;
-    if (rig.headA && !this.sitting) { rig.headA.add(this.face); this.face.position.set(...FACE_ON_RIG.pos); this.face.scale.setScalar(FACE_ON_RIG.scale); }
+    rig.ownFace = key === 'female' || key === 'realman';          // textured characters keep their own face
+    this.bellyM.visible = key === 'male';
+    if (rig.headA && !rig.ownFace) { rig.headA.add(this.face); this.face.position.set(...FACE_ON_RIG.pos); this.face.scale.setScalar(FACE_ON_RIG.scale); }
     this.applySkin(); this.applyPose();
     this._lastWeight = -1;
     return true;
@@ -1664,7 +1670,7 @@ class HumanFigure {
     for (const p of rig.skel) p.visible = style === 'skeleton';
     this.bellyM.material = style === 'skin' ? this.skin : SKIN_MATS[style];
     skeletonViz.set(style === 'skeleton' ? rig : null);
-    this.face.visible = !this.sitting && !!rig.headA && style !== 'skeleton' && !(style === 'cartoon' && rig.toon);
+    this.face.visible = !this.sitting && !rig.ownFace && !!rig.headA && style !== 'skeleton' && !(style === 'cartoon' && rig.toon);
     // Sculpt look: bald grey head like a ZBrush base mesh
     const sculpt = style === 'sculpt';
     this.face.traverse(o => { if (o.isMesh) { o.userData.mat0 ||= o.material; o.material = sculpt ? SKIN_MATS.sculpt : o.userData.mat0; } });
@@ -1676,7 +1682,8 @@ class HumanFigure {
     rig.mixer.stopAllAction();
     for (const { bone, bind } of Object.values(rig.bones)) bone.quaternion.copy(bind);
     if (this.sitting) return;                                  // sitting is posed procedurally every frame
-    const clip = rig.clips.find(c => c.name === state.pose) || rig.clips.find(c => c.name === 'idle') || rig.clips[0];
+    const named = n => rig.clips.find(c => c.name.toLowerCase() === n.toLowerCase());
+    const clip = named(state.pose) || named('idle') || rig.clips[0];
     if (clip) rig.mixer.clipAction(clip).reset().fadeIn(0.25).play();
   }
 
@@ -1721,8 +1728,9 @@ const body = new HumanFigure();
 scene.add(body.pivot);
 window.hydrosim = { body, state, sim, THREE, SIT, targets, score };   // handy for debugging in the console
 body.rigs = {};
-body.loadRig('male', HUMAN_MODEL_URLS, 0, rig => {
-  if (rig && state.figure === 'male') body.activate('male');
+const FIGURE_URLS = { realman: REALMAN_MODEL_URLS, male: HUMAN_MODEL_URLS, female: FEMALE_MODEL_URLS };
+body.loadRig(state.figure, FIGURE_URLS[state.figure], 0, rig => {
+  if (rig && state.figure === rig.key) body.activate(rig.key);
   document.getElementById('modelNote').textContent = rig ? '' : 'Could not load the rigged body: using the built-in mannequin.';
 });
 
@@ -2349,7 +2357,7 @@ function applyFigure(key) {
   };
   if (body.rigs[key]) return go();
   $('modelNote').textContent = 'Loading figure…';
-  body.loadRig(key, key === 'female' ? FEMALE_MODEL_URLS : [], 0, rig => {
+  body.loadRig(key, FIGURE_URLS[key] || [], 0, rig => {
     if (rig && state.figure === key) go();
     else if (!rig) { $('modelNote').textContent = 'Could not load that figure.'; state.figure = body.rig?.key || 'male'; syncUI(); }
   });
@@ -2393,9 +2401,13 @@ function setValue(key, value) {
   if (key === 'surface') { toilet.group.visible = value !== 'floor'; toilet.water.visible = value === 'water'; }
   if (key === 'autoFire' && value) state.autoAim = true;
   if (key === 'figure') applyFigure(value);
-  if (key === 'skinStyle') body.applySkin();
+  if (key === 'skinStyle') {
+    if (value === 'cartoon' && state.figure === 'realman') { state.figure = 'male'; applyFigure('male'); }
+    body.applySkin();
+  }
+  if (key === 'figure' && value === 'realman' && state.skinStyle === 'cartoon') { state.skinStyle = 'skin'; }
   if (key === 'pose') body.applyPose();
-  if (key === 'scenario' && value !== 'bathroom' && body.sitting) { state.figure = 'male'; applyFigure('male'); }
+  if (key === 'scenario' && value !== 'bathroom' && body.sitting) { state.figure = 'realman'; applyFigure('realman'); }
   if (key === 'scenario') { applyScenario(value); if (value === 'range' && !state.autoAim) state.autoAim = true; }
   if (key === 'overdrive' && value && !state.flowing) state.flowing = true;
   syncUI();
