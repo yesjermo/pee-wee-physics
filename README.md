@@ -138,6 +138,14 @@ Then feature creep happened. Now there's a slime target range and you can turn i
   $$\theta = \arctan\left(\frac{v^2 - \sqrt{v^4 - g(gd^2 + 2\,\Delta y\, v^2)}}{g\,d}\right)$$
   *(Yes, there's a physics equation in a pee simulator README. You're welcome.)*
 
+### 🚀 Pee-jet (yes, you can fly)
+- The stream has momentum, so it pushes back: **thrust F = ṁ · v** (mass flow × exit speed), opposite the stream. Newton's third law, finally applied to something important.
+- Real pee makes about **0.07 N** against about **735 N** of body weight, so there's a **Pressure boost** slider (up to ×10,000).
+- Tick **Pee-jet**, crank the boost, **flip upside down so the stream points at the floor**, and lift off. Point it sideways to rocket across the scene.
+- Once airborne you **keep your momentum**: gravity, air drag, ground friction, bouncy landings, and you land lying down if you fell that way. Walls, the bathroom tiles and the Chicago deck are solid.
+- Each figure has its own mass: the man about 75 kg, the beagle about 12 kg (with a quarter of the flow), and the bronze statue on its pedestal about 400 kg, so it's basically grounded.
+- The camera follows you while you fly, the HUD shows thrust vs weight and altitude, and **🪂 Land & reset** puts you back on your spot.
+
 ### ⚡ Overdrive
 Unlimited bladder. 1.8× pressure. Drains your body water until you **become the pee ball**. 💛
 It has eyes. It bounces. It's honestly the best character in the game.
