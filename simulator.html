@@ -412,6 +412,10 @@
     </div>
     <label class="check"><input type="checkbox" data-key="auto"> Auto cycle (release when bladder is full)</label>
     <label class="check warn"><input type="checkbox" data-key="overdrive"> ⚡ Overdrive: unlimited bladder, drains body water</label>
+    <label class="check"><input type="checkbox" data-key="jet"> 🚀 Pee-jet: the stream's recoil pushes you (Newton's 3rd law)</label>
+    <div class="row"><label>Pressure boost <span id="v-jetBoost"></span></label><input type="range" data-key="jetBoost" min="0" max="4" step="0.05"></div>
+    <div class="note" id="jetNote" style="min-height:0">Point the stream down (flip upside down) to lift off.</div>
+    <div class="btns"><button id="btnLand" style="flex:1">🪂 Land &amp; reset position</button></div>
     <div class="btns"><button class="danger" id="btnRespawn" style="flex:1;display:none">Respawn as human</button></div>
   </section>
   <section>
@@ -604,7 +608,7 @@ const SCENARIOS = {
 };
 
 const state = {
-  labels: true, figure: 'male', skinStyle: 'skeleton', quality: /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'low' : 'high', pose: 'idle', expression: 'auto', studio: false,
+  labels: true, jet: false, jetBoost: 3.0, figure: 'male', skinStyle: 'skeleton', quality: /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'low' : 'high', pose: 'idle', expression: 'auto', studio: false,
   scenario: 'bathroom', yaw: 0, flip: 0, roll: 0, spin: false, spinAxis: 'yaw', spinSpeed: 0.7, autoAim: false, autoFire: false,
   weight: 0.45, waist: 0.45, belly: 0.3, skin: 1,
   hydration: 0.6, fill: 0.55, aim: -0.42, bodyWater: 1,
@@ -988,6 +992,7 @@ function addSolid(scene, shape, x, y, z, dims, sound = 'ceramic') {
     ? { scene, shape: 'box', pos: new THREE.Vector3(x, y, z), half: new THREE.Vector3(...dims), maxHp: Infinity, sound }
     : { scene, shape: 'cyl', pos: new THREE.Vector3(x, y, z), r: dims[0], h: dims[1], maxHp: Infinity, sound });
 }
+addSolid('bathroom', 'box', 0, 1.2, 1.34, [4, 1.2, 0.02], 'ceramic');   // the tiled wall stops the stream and a flying body
 function facadeTextures(wall, lit, dark, cols, rows, extra) {
   const rnd = Array.from({ length: cols * rows }, Math.random);
   const draw = glow => g => {
@@ -1771,6 +1776,7 @@ buildAlley('chiunder', {
     // Deck overhead with I-beams, green columns, and an elevated train crossing every so often
     const concrete = new THREE.MeshStandardMaterial({ color: '#4d4f52', roughness: 0.95 });
     const deck = shadowed(new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.35, 7.6), concrete)); deck.position.set(0, 3.7, 0.1); g.add(deck);
+    addSolid('chiunder', 'box', 0, 3.7, 0.1, [3.3, 0.18, 3.8], 'ceramic');   // the concrete deck is a ceiling for streams and flyers
     const green = new THREE.MeshStandardMaterial({ color: '#2f5b45', roughness: 0.6, metalness: 0.4 });
     for (let i = 0; i < 6; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.18, 0.12), green); b.position.set(0, 3.43, -3.2 + i * 1.3); g.add(b); }
     for (const [x, z] of [[1.9, -2.6], [1.9, 0.4], [1.9, 3.0], [-1.0, -2.6], [-1.0, 3.0]]) {
@@ -2031,6 +2037,7 @@ function updateTrainer(dt, t) {
 function startRound() {
   if (state.scenario !== 'aim') setValue('scenario', 'aim');
   if (state.dissolved) respawn();
+  resetFlight();
   Object.assign(trainer, { active: true, time: ROUND_S, pops: 0, fireT: 0, onT: 0, ttk: [], prevPower: state.power, last: null });
   state.power = 1.6; state.yaw = 0; state.flip = state.roll = 0; state.spin = false; sim.yawVel = sim.pitchVel = 0;
   for (const o of trainer.orbs) { o.dead = true; o.timer = 0.15; o.mesh.visible = false; }
@@ -3558,6 +3565,7 @@ function goView(name) {
   let toP = new THREE.Vector3(...v.pos), toT = new THREE.Vector3(...v.target);
   const k = body.rig?.viewScale ?? 1;                  // small figures (the beagle) get the close-up presets scaled down to their size
   if (k !== 1 && ['side', 'macro', 'cross', 'field'].includes(name)) { toP.multiplyScalar(k); toT.multiplyScalar(k); }
+  if (typeof flight !== 'undefined' && name !== 'aim') { toP.add(flight.off); toT.add(flight.off); }   // follow the body if the pee-jet moved it
   tween = { t: 0, fromP: camera.position.clone(), fromT: controls.target.clone(), toP, toT };
   body.setCrossSection(name === 'cross');
   document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === name));
@@ -3777,7 +3785,7 @@ function updatePeeBall(t) {
   peeBall.group.visible = k > 0.01;
   if (!peeBall.group.visible) return;
   const w = Math.sin(t * 5) * 0.07, bounce = Math.abs(Math.sin(t * 2.4)) * 0.12;
-  peeBall.group.position.set(body.root.position.x, bounce * k, body.root.position.z);
+  peeBall.group.position.set(body.pivot.position.x, bounce * k, body.pivot.position.z);   // the pivot moves when the pee-jet has flown you somewhere
   peeBall.group.rotation.y = state.yaw;
   peeBall.group.scale.set(k * (1 + w), k * (1 - w), k * (1 + w));
 }
@@ -3852,6 +3860,7 @@ function applyFigure(key) {
     if (!body.activate(key)) return;
     const sit = key === 'female';
     body.pivot.position.set(0, body.pivotY ?? PIVOT_Y, sit ? TOILET_Z + 0.07 : 0);
+    resetFlight(body.pivot.position);
     toilet.seatPivot.rotation.x = sit ? 0 : 1.6;
     if (sit) {
       if (state.scenario !== 'bathroom') { state.scenario = 'bathroom'; applyScenario('bathroom'); }
@@ -3926,7 +3935,7 @@ const deg = v => Math.round(v * 57.3) + '°';
 const fmt = { weight: v => Math.round(v * 100) + '%', waist: v => Math.round(v * 100) + '%', belly: v => Math.round(v * 100) + '%',
   skin: v => Math.round(v * 100) + '%', hydration: v => Math.round(v * 3.5 * 10) / 10 + ' L/day', aim: deg, yaw: deg,
   power: v => v.toFixed(2) + '×', flip: deg, roll: deg, spinSpeed: v => (v >= 0 ? '↺ ' : '↻ ') + Math.abs(v * 57.3).toFixed(0) + '°/s', duration: v => v ? v + ' s' : 'until empty',
-  volume: v => Math.round(v * 100) + '%', pitch: v => v.toFixed(2) + '×' };
+  volume: v => Math.round(v * 100) + '%', pitch: v => v.toFixed(2) + '×', jetBoost: v => '×' + Math.round(Math.pow(10, v)).toLocaleString() };
 
 function syncUI() {
   document.querySelectorAll('[data-key]').forEach(el => {
@@ -3997,6 +4006,7 @@ $('glbFile').onchange = e => {
     $('modelNote').textContent = rig.hips ? `Loaded ${f.name} (Mixamo rig detected: poses & skeleton work).` : `Loaded ${f.name}. No Mixamo skeleton found, so poses and the skeleton skin are limited.`;
   });
 };
+$('btnLand').onclick = () => { resetFlight(); goView(state.view); };
 $('btnUpright').onclick = () => { state.flip = state.roll = 0; sim.yawVel = sim.pitchVel = 0; state.spin = false; syncUI(); };
 document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => goView(b.dataset.view));
 $('tglBody').onclick = () => { $('panelBody').classList.toggle('hidden'); $('panelSound').classList.add('hidden'); };
@@ -4124,6 +4134,105 @@ function drawViz() {
 }
 
 /* =====================================================================
+   PEE-JET: stream recoil and airborne momentum (Newton's 3rd law)
+   Thrust F = ṁ·v (mass flow in kg/s × exit speed in m/s), pushed opposite the stream, times a pressure boost.
+   Real numbers: ~0.024 kg/s × ~3 m/s ≈ 0.07 N against ~735 N of body weight, hence the boost slider (up to ×10,000:
+   that just hovers a 75 kg body at normal power; more stream power or Overdrive makes it climb).
+   Once thrust beats weight the body lifts off and keeps its momentum: gravity, light air drag, ground friction,
+   bouncy landings and soft walls at the edge of the map. The camera follows while it's away from home.
+   ===================================================================== */
+const FIGURE_MASS = { male: 75, female: 60, beagle: 12, statue: 400, custom: 75 };   // kg (the statue includes its stone pedestal)
+const FIGURE_FLOW = { beagle: 0.25 };                                                  // a beagle's stream carries about a quarter of a human's flow
+const G = 9.81, MU_STATIC = 0.6, MU_KINETIC = 0.45, AIR_DRAG = 0.12, BOUNCE = 0.35, MAP_R = 14, CEILING = 30;
+const flight = { base: new THREE.Vector3(0, PIVOT_Y, 0), off: new THREE.Vector3(), vel: new THREE.Vector3(), airborne: false,
+  thrust: 0, weight: 0, last: new THREE.Vector3(), landT: 0 };
+const _thr = new THREE.Vector3(), _acc = new THREE.Vector3(), _fp = new THREE.Vector3(), _end = new THREE.Vector3();
+/** Put the figure back on its home spot, at rest. Pass `home` when the figure has just been placed somewhere new. */
+function resetFlight(home) {
+  if (home) flight.base.copy(home);
+  flight.off.set(0, 0, 0); flight.vel.set(0, 0, 0); flight.airborne = false;
+  body.pivot.position.copy(flight.base); flight.last.copy(flight.base);
+}
+function figureMass() { return FIGURE_MASS[state.figure] ?? 75; }
+/** Keep the flying body out of walls, ceilings and solid props: a 0.3 m sphere at the pivot, pushed out of each solid. */
+const BODY_R = 0.3;
+function collideSolids() {
+  const px = flight.base.x + flight.off.x, py = flight.base.y + flight.off.y, pz = flight.base.z + flight.off.z;
+  for (const t of targets) {
+    if (t.scene !== state.scenario || t.maxHp !== Infinity) continue;   // only the scene's solids
+    let nx = 0, ny = 0, nz = 0, depth = 0;
+    if (t.shape === 'box') {
+      const dx = px - t.pos.x, dy = py - t.pos.y, dz = pz - t.pos.z;
+      const ox = t.half.x + BODY_R - Math.abs(dx), oy = t.half.y + BODY_R - Math.abs(dy), oz = t.half.z + BODY_R - Math.abs(dz);
+      if (ox <= 0 || oy <= 0 || oz <= 0) continue;
+      if (ox <= oy && ox <= oz) { nx = Math.sign(dx) || 1; depth = ox; } else if (oy <= oz) { ny = Math.sign(dy) || 1; depth = oy; } else { nz = Math.sign(dz) || 1; depth = oz; }
+    } else if (t.shape === 'cyl') {
+      if (py < t.pos.y - BODY_R || py > t.pos.y + t.h + BODY_R) continue;
+      const dx = px - t.pos.x, dz = pz - t.pos.z, d = Math.hypot(dx, dz) || 1e-6, pen = t.r + BODY_R - d;
+      if (pen <= 0) continue;
+      nx = dx / d; nz = dz / d; depth = pen;
+    } else continue;
+    flight.off.x += nx * depth; flight.off.y += ny * depth; flight.off.z += nz * depth;
+    const vn = flight.vel.x * nx + flight.vel.y * ny + flight.vel.z * nz;
+    if (vn < 0) { flight.vel.x -= 1.4 * vn * nx; flight.vel.y -= 1.4 * vn * ny; flight.vel.z -= 1.4 * vn * nz; }   // bounce off, losing most of the speed
+  }
+}
+function updateFlight(dt) {
+  const m = figureMass();
+  flight.weight = m * G;
+  // Recoil thrust from the stream (none while sitting, dissolved, or with the jet off)
+  const active = state.jet && !body.sitting && !state.dissolved && !trainer.active;
+  flight.thrust = active ? (sim.flow * (FIGURE_FLOW[state.figure] ?? 1) / 1000) * sim.speed * Math.pow(10, state.jetBoost) : 0;   // F = ṁ·v (flow and speed already ramp with the stream)
+  if (!active && !flight.airborne && flight.vel.lengthSq() < 1e-8) { flight.last.copy(body.pivot.position); return; }   // at rest: nothing to simulate
+  body.getDirection(_thr).multiplyScalar(-flight.thrust);              // push opposite the stream
+  _acc.copy(_thr).divideScalar(m); _acc.y -= G;
+  // Lowest point of the body (feet or head, whichever is down after flips) must stay above the floor
+  const hgt = body.rig?.height ?? 1.8, py = body.pivotY ?? PIVOT_Y;
+  _end.set(0, -py, 0).applyQuaternion(body.pivot.quaternion); const e0 = _end.y;
+  _end.set(0, hgt - py, 0).applyQuaternion(body.pivot.quaternion); const e1 = _end.y;
+  const groundOff = Math.max(-Math.min(e0, e1), 0.12) - flight.base.y;  // pivot height (relative to home) that puts the lowest end, or the back when lying flat, on the floor
+  const onGround = flight.off.y <= groundOff + 1e-4;
+  if (onGround) {
+    if (_acc.y < 0) _acc.y = 0;                                       // the ground pushes back
+    if (flight.vel.y < 0) flight.vel.y = 0;
+    // Friction: needs enough sideways thrust to start sliding, then slows the slide
+    const hx = _thr.x, hz = _thr.z, hF = Math.hypot(hx, hz), normal = Math.max(0, m * G - _thr.y);
+    const hv = Math.hypot(flight.vel.x, flight.vel.z);
+    if (hv < 0.02 && hF <= MU_STATIC * normal) { _acc.x = _acc.z = 0; flight.vel.x = flight.vel.z = 0; }
+    else if (hv > 0) { const fr = MU_KINETIC * normal / m; _acc.x -= fr * flight.vel.x / hv; _acc.z -= fr * flight.vel.z / hv; }
+  }
+  flight.vel.addScaledVector(_acc, dt);
+  if (!onGround) flight.vel.multiplyScalar(Math.exp(-AIR_DRAG * dt));  // light air drag while flying
+  flight.off.addScaledVector(flight.vel, dt);
+  // Landing: bounce if it came down hard, otherwise settle
+  if (flight.off.y < groundOff) {
+    const impact = -flight.vel.y; flight.off.y = groundOff;
+    if (impact > 2.5) {
+      flight.vel.y = impact * BOUNCE; flight.vel.x *= 0.7; flight.vel.z *= 0.7;
+      if (audio.started) audio.blip('floor', Math.min(1, impact / 8));
+      _fp.copy(flight.base).add(flight.off).setY(0.05); for (let i = 0; i < 4; i++) puff(_fp, '#cfd3da', 0.35);
+    } else flight.vel.y = 0;
+  }
+  if (flight.off.y > CEILING) { flight.off.y = CEILING; flight.vel.y = Math.min(0, flight.vel.y); }
+  // Soft walls at the edge of the map
+  const r = Math.hypot(flight.base.x + flight.off.x, flight.base.z + flight.off.z);
+  if (r > MAP_R) {
+    const nx = (flight.base.x + flight.off.x) / r, nz = (flight.base.z + flight.off.z) / r;
+    flight.off.x -= nx * (r - MAP_R); flight.off.z -= nz * (r - MAP_R);
+    const vn = flight.vel.x * nx + flight.vel.z * nz; if (vn > 0) { flight.vel.x -= 1.6 * vn * nx; flight.vel.z -= 1.6 * vn * nz; }
+  }
+  collideSolids();
+  flight.airborne = flight.off.y > groundOff + 0.02;
+  body.pivot.position.copy(flight.base).add(flight.off);
+  // Camera follows the body while it's away from its spot (unless a camera move is playing)
+  if (!tween) {
+    _fp.copy(body.pivot.position).sub(flight.last);
+    camera.position.add(_fp); controls.target.add(_fp);
+  }
+  flight.last.copy(body.pivot.position);
+}
+
+/* =====================================================================
    10. MAIN LOOP
    ===================================================================== */
 /* Post-processing chain (three.js addons): HDR + 4x MSAA render target -> GTAO (ultra / studio) -> selective-looking
@@ -4227,6 +4336,7 @@ function frame() {
   if (held.ArrowDown) state.flip += dt * 1.6;
   updatePose(dt);
   updatePhysiology(dt);
+  updateFlight(dt);
   body.update(dt, t);
   updatePeeBall(t);
   updateTargets(dt, t);
@@ -4358,6 +4468,8 @@ function systemStatus() {
   if (state.dissolved) return ['PEE BALL', 'BODY WATER DEPLETED · RESPAWN TO CONTINUE', true];
   if (sim.submerged > 0) return ['DISSOLVING', 'FLOOD CONTACT · FLUSH AND MOP NOW', true];
   if (sim.spillT > 0) return ['OVERFLOW', `BOWL AT ${BOWL_CAP_ML} ML · FLUSH REQUIRED`, true];
+  if (state.jet && (flight.airborne || flight.thrust > 0.5)) return [flight.airborne ? 'AIRBORNE' : 'PEE-JET',
+    `THRUST ${flight.thrust.toFixed(flight.thrust < 10 ? 2 : 0)} N · WEIGHT ${flight.weight.toFixed(0)} N · ALT ${flight.off.y.toFixed(1)} M`, true];
   if (sim.flushing > 0) return ['FLUSHING', 'BOWL DRAINING', true];
   if (state.flowing && sim.env > 0.05) return [state.overdrive ? 'OVERDRIVE' : 'RELEASING',
     `FLOW ${sim.flow.toFixed(1)} ML/S · RANGE ${sim.range.toFixed(2)} M · ${Math.round(state.aim * 57.3)}°`, true];
@@ -4445,6 +4557,9 @@ function hudFrame(dt) {
   const run = (performance.now() - hud.t0) / 1000, [status, sub, active] = systemStatus();
   if (document.activeElement !== $('hdrSceneSel')) $('hdrSceneSel').value = state.scenario;
   $('hdrTime').textContent = mmss(run);
+  $('jetNote').textContent = body.sitting ? 'Sitting figures stay put.'
+    : !state.jet ? `Off. You weigh ${(figureMass() * G).toFixed(0)} N (${figureMass()} kg). Tick Pee-jet, crank the boost, point the stream down.`
+    : `Thrust ${flight.thrust.toFixed(flight.thrust < 10 ? 2 : 0)} N vs weight ${flight.weight.toFixed(0)} N (${figureMass()} kg). Point the stream down to lift off.`;
   $('hdrStatus').textContent = status; $('hdrDot').classList.toggle('on', active);
   $('chipText').textContent = status; $('chipSub').textContent = sub;
   $('trainer').classList.toggle('on', trainer.active);
